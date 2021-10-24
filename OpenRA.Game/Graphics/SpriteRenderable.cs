@@ -17,7 +17,6 @@ namespace OpenRA.Graphics
 	public class SpriteRenderable : IPalettedRenderable, IModifyableRenderable, IFinalizedRenderable
 	{
 		public static readonly IEnumerable<IRenderable> None = new IRenderable[0];
-
 		readonly Sprite sprite;
 		readonly WPos pos;
 		readonly WVec offset;
@@ -28,8 +27,10 @@ namespace OpenRA.Graphics
 		readonly TintModifiers tintModifiers;
 		readonly float alpha;
 		readonly bool isDecoration;
+		readonly int layer;
 
-		public SpriteRenderable(Sprite sprite, WPos pos, WVec offset, int zOffset, PaletteReference palette, float scale, float alpha, float3 tint, TintModifiers tintModifiers, bool isDecoration)
+		public SpriteRenderable(Sprite sprite, WPos pos, WVec offset, int zOffset, PaletteReference palette, float scale, float alpha,
+								float3 tint, TintModifiers tintModifiers, bool isDecoration, int layer = 0)
 		{
 			this.sprite = sprite;
 			this.pos = pos;
@@ -41,6 +42,7 @@ namespace OpenRA.Graphics
 			this.isDecoration = isDecoration;
 			this.tintModifiers = tintModifiers;
 			this.alpha = alpha;
+			this.layer = layer;
 
 			// PERF: Remove useless palette assignments for RGBA sprites
 			// HACK: This is working around the fact that palettes are defined on traits rather than sequences
@@ -53,16 +55,21 @@ namespace OpenRA.Graphics
 		public WVec Offset => offset;
 		public PaletteReference Palette => palette;
 		public int ZOffset => zOffset;
+		public int Layer => layer;
 		public bool IsDecoration => isDecoration;
 
 		public float Alpha => alpha;
 		public float3 Tint => tint;
 		public TintModifiers TintModifiers => tintModifiers;
 
-		public IPalettedRenderable WithPalette(PaletteReference newPalette) { return new SpriteRenderable(sprite, pos, offset, zOffset, newPalette, scale, alpha, tint, tintModifiers, isDecoration); }
-		public IRenderable WithZOffset(int newOffset) { return new SpriteRenderable(sprite, pos, offset, newOffset, palette, scale, alpha, tint, tintModifiers, isDecoration); }
-		public IRenderable OffsetBy(in WVec vec) { return new SpriteRenderable(sprite, pos + vec, offset, zOffset, palette, scale, alpha, tint, tintModifiers, isDecoration); }
-		public IRenderable AsDecoration() { return new SpriteRenderable(sprite, pos, offset, zOffset, palette, scale, alpha, tint, tintModifiers, true); }
+		public IPalettedRenderable WithPalette(PaletteReference newPalette)
+		{ return new SpriteRenderable(sprite, pos, offset, zOffset, newPalette, scale, alpha, tint, tintModifiers, isDecoration, layer); }
+		public IRenderable WithZOffset(int newOffset)
+		{ return new SpriteRenderable(sprite, pos, offset, newOffset, palette, scale, alpha, tint, tintModifiers, isDecoration, layer); }
+		public IRenderable OffsetBy(in WVec vec)
+		{ return new SpriteRenderable(sprite, pos + vec, offset, zOffset, palette, scale, alpha, tint, tintModifiers, isDecoration, layer); }
+		public IRenderable AsDecoration()
+		{ return new SpriteRenderable(sprite, pos, offset, zOffset, palette, scale, alpha, tint, tintModifiers, true, layer); }
 
 		public IModifyableRenderable WithAlpha(float newAlpha)
 		{
