@@ -1807,7 +1807,7 @@ namespace OpenRA.Mods.Common.Traits
 				return modifiers.HasModifier(TargetModifiers.ForceMove);
 			}
 
-			public virtual bool CanTarget(Actor self, in Target target, List<Actor> othersAtTarget, ref TargetModifiers modifiers, ref string cursor)
+			public virtual bool CanTarget(Actor self, in Target target, ref TargetModifiers modifiers, ref string cursor)
 			{
 				if (!target.SelfIsTerrainType() || (mobileOffGrid.requireForceMove && !modifiers.HasModifier(TargetModifiers.ForceMove)))
 					return false;

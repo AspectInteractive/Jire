@@ -540,22 +540,26 @@ namespace OpenRA.Mods.Common.Activities
 
 			var move = mobileOffGrid.GenFinalWVec();
 
-			if (mobileOffGrid.PositionBuffer.Count >= 100)
+			if (mobileOffGrid.PositionBuffer.Count >= 3)
 			{
 				var lengthMoved = (mobileOffGrid.PositionBuffer.Last() - mobileOffGrid.PositionBuffer.ElementAt(0)).Length;
 				var deltaFirst = currPathTarget - mobileOffGrid.PositionBuffer.ElementAt(0);
 				var deltaLast = currPathTarget - mobileOffGrid.PositionBuffer.Last();
+				System.Console.WriteLine($"lengthMoved: {lengthMoved}");
 
-				if (lengthMoved < 1024 && !searchingForNextTarget)
+				if (lengthMoved < mobileOffGrid.MovementSpeed * 2) // && !searchingForNextTarget)
 				{
 					// Create new path to the next path, then join it to the remainder of the existing path
 					// Make sure we are not re-running this if we received the same result last time
 					// Also do not re-run if max expansions were reached last time
 					isBlocked = true;
+					System.Console.WriteLine("Blocked!");
 					if (currPathTarget != lastPathTarget)
 					{
+						System.Console.WriteLine("Blocked and not last target!");
 						if (!reachedMaxExpansions && thetaIters < maxThetaIters)
 						{
+							System.Console.WriteLine("Expand Theta when blocked");
 							searchingForNextTarget = true;
 							// mobileOffGrid.thetaStarSearch = new ThetaStarPathSearch(self.World, self, mobileOffGrid.CenterPosition, currPathTarget
 							//										  , actorsSharingMove);
@@ -568,8 +572,9 @@ namespace OpenRA.Mods.Common.Activities
 							pathFound = false;
 							thetaIters++;
 						}
-						else if (mobileOffGrid.PositionBuffer.Count >= 180) // 3 seconds
+						else if (mobileOffGrid.PositionBuffer.Count >= 15) // 3 seconds
 						{
+							System.Console.WriteLine("Clear Position Buffer when >= 15");
 							isBlocked = false;
 							EndingActions();
 							return Complete();
