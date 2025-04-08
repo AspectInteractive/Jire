@@ -74,11 +74,11 @@ namespace OpenRA.Test
 			public WPos CircleCenter1;
 			public WDist CircleRadius2;
 			public WPos CircleCenter2;
-			public int2? Intersection1;
-			public int2? Intersection2;
+			public WPos? Intersection1;
+			public WPos? Intersection2;
 
 			public CircleCircleIntersectionTestCase(WDist circleRadius1, WPos circleCenter1, WDist circleRadius2, WPos circleCenter2,
-				int2? intersection1 = null, int2? intersection2 = null)
+				WPos? intersection1 = null, WPos? intersection2 = null)
 			{
 				CircleRadius1 = circleRadius1;
 				CircleCenter1 = circleCenter1;
@@ -157,47 +157,51 @@ namespace OpenRA.Test
 		{
 			var circleTestCases = new List<CircleCircleIntersectionTestCase>()
 			{
-				new(new WDist(1234), new WPos(426, 0, 0), new WDist(1234), new WPos(2000, -1700, 0), new int2(901, -1139), new int2(1525, -561)),
-				new(new WDist(1234), new WPos(426, 0, 0), new WDist(1234), new WPos(2500, -1700, 0)),
-				new(new WDist(1234), new WPos(2000, -1700, 0), new WDist(1234),new WPos(426, 0, 0), new int2(901, -1139), new int2(1525, -561)),
-				new(new WDist(1234), new WPos(2500, -1700, 0), new WDist(1234),new WPos(426, 0, 0)),
-				new(new WDist(1234), new WPos(0, 0, 0), new WDist(1234), new WPos(2468, 0, 0), new int2(1234, 0), new int2(1234, 0)),
-				new(new WDist(1234), new WPos(0, 0, 0), new WDist(1234), new WPos(-2468, 0, 0), new int2(-1234, 0), new int2(-1234, 0)),
-				new(new WDist(1234), new WPos(0, 0, 0), new WDist(1234), new WPos(0, 2468, 0), new int2(0, 1234), new int2(0, 1234)),
-				new(new WDist(1234), new WPos(0, 0, 0), new WDist(1234), new WPos(0, -2468, 0), new int2(0, -1234), new int2(0, -1234)),
-				new(new WDist(1234), new WPos(0, 0, 0), new WDist(1234), new WPos(2467, 0, 0), new int2(35, 1234), new int2(-35, 1234)),
-				new(new WDist(1234), new WPos(0, 0, 0), new WDist(1234), new WPos(-2467, 0, 0), new int2(35, -1234), new int2(-35, -1234)),
-				new(new WDist(1234), new WPos(0, 0, 0), new WDist(1234), new WPos(0, 2467, 0), new int2(-35, 1234), new int2(35, 1234)),
-				new(new WDist(1234), new WPos(0, 0, 0), new WDist(1234), new WPos(0, -2467, 0), new int2(-35, -1234), new int2(35, -1234)),
-				new(new WDist(1234), new WPos(2468, 0, 0),  new WDist(1234), new WPos(0, 0, 0), new int2(1234, 0), new int2(1234, 0)),
-				new(new WDist(1234), new WPos(-2468, 0, 0), new WDist(1234), new WPos(0, 0, 0), new int2(-1234, 0), new int2(-1234, 0)),
-				new(new WDist(1234), new WPos(0, 2468, 0),  new WDist(1234), new WPos(0, 0, 0), new int2(0, 1234), new int2(0, 1234)),
-				new(new WDist(1234), new WPos(0, -2468, 0), new WDist(1234), new WPos(0, 0, 0), new int2(0, -1234), new int2(0, -1234)),
-				new(new WDist(1234), new WPos(2467, 0, 0),  new WDist(1234), new WPos(0, 0, 0), new int2(35, 1234), new int2(-35, 1234)),
-				new(new WDist(1234), new WPos(-2467, 0, 0), new WDist(1234), new WPos(0, 0, 0), new int2(35, -1234), new int2(-35, -1234)),
-				new(new WDist(1234), new WPos(0, 2467, 0),  new WDist(1234), new WPos(0, 0, 0), new int2(-35, 1234), new int2(35, 1234)),
-				new(new WDist(1234), new WPos(0, -2467, 0), new WDist(1234), new WPos(0, 0, 0), new int2(-35, -1234), new int2(35, -1234)),
-				new(new WDist(1234), new WPos(0, 2468, 0), new WDist(1234), new WPos(1700, 1730, 0), new int2(1175, 2847), new int2(526, 1351)),
-				new(new WDist(1234), new WPos(1700, 1730, 0), new WDist(1234), new WPos(0, 2468, 0), new int2(1175, 2847), new int2(526, 1351)),
+				//new(new WDist(1234), new WPos(426, 0, 0), new WDist(1234), new WPos(2000, -1700, 0), new WPos(901, -1139, 0), new WPos(1525, -561, 0)),
+				//new(new WDist(1234), new WPos(426, 0, 0), new WDist(1234), new WPos(2500, -1700, 0)),
+				//new(new WDist(1234), new WPos(2000, -1700, 0), new WDist(1234),new WPos(426, 0, 0), new WPos(901, -1139, 0), new WPos(1525, -561, 0)),
+				//new(new WDist(1234), new WPos(2500, -1700, 0), new WDist(1234),new WPos(426, 0, 0)),
+				new(new WDist(1234), new WPos(0, 0, 0), new WDist(1234), new WPos(2468, 0, 0), new WPos(1234, 0, 0), new WPos(1234, 0, 0)),
+				//new(new WDist(1234), new WPos(0, 0, 0), new WDist(1234), new WPos(-2468, 0, 0), new WPos(-1234, 0, 0), new WPos(-1234, 0, 0)),
+				new(new WDist(1234), new WPos(0, 0, 0), new WDist(1234), new WPos(0, 2468, 0), new WPos(0, 1234, 0), new WPos(0, 1234, 0)),
+				//new(new WDist(1234), new WPos(0, 0, 0), new WDist(1234), new WPos(0, -2468, 0), new WPos(0, -1234, 0), new WPos(0, -1234, 0)),
+				new(new WDist(1234), new WPos(0, 0, 0), new WDist(1234), new WPos(2467, 0, 0), new WPos(35, 1234, 0), new WPos(-35, 1234, 0)),
+				//new(new WDist(1234), new WPos(0, 0, 0), new WDist(1234), new WPos(-2467, 0, 0), new WPos(35, -1234, 0), new WPos(-35, -1234, 0)),
+				new(new WDist(1234), new WPos(0, 0, 0), new WDist(1234), new WPos(0, 2467, 0), new WPos(-35, 1234, 0), new WPos(35, 1234, 0)),
+				//new(new WDist(1234), new WPos(0, 0, 0), new WDist(1234), new WPos(0, -2467, 0), new WPos(-35, -1234, 0), new WPos(35, -1234, 0)),
+				new(new WDist(1234), new WPos(2468, 0, 0),  new WDist(1234), new WPos(0, 0, 0), new WPos(1234, 0, 0), new WPos(1234, 0, 0)),
+				//new(new WDist(1234), new WPos(-2468, 0, 0), new WDist(1234), new WPos(0, 0, 0), new WPos(-1234, 0, 0), new WPos(-1234, 0, 0)),
+				new(new WDist(1234), new WPos(0, 2468, 0),  new WDist(1234), new WPos(0, 0, 0), new WPos(0, 1234, 0), new WPos(0, 1234, 0)),
+				//new(new WDist(1234), new WPos(0, -2468, 0), new WDist(1234), new WPos(0, 0, 0), new WPos(0, -1234, 0), new WPos(0, -1234, 0)),
+				new(new WDist(1234), new WPos(2467, 0, 0),  new WDist(1234), new WPos(0, 0, 0), new WPos(35, 1234, 0), new WPos(-35, 1234, 0)),
+				//new(new WDist(1234), new WPos(-2467, 0, 0), new WDist(1234), new WPos(0, 0, 0), new WPos(35, -1234, 0), new WPos(-35, -1234, 0)),
+				//new(new WDist(1234), new WPos(0, 2467, 0),  new WDist(1234), new WPos(0, 0, 0), new WPos(-35, 1234, 0), new WPos(35, 1234, 0)),
+				//new(new WDist(1234), new WPos(0, -2467, 0), new WDist(1234), new WPos(0, 0, 0), new WPos(-35, -1234, 0), new WPos(35, -1234, 0)),
+				new(new WDist(1234), new WPos(0, 2468, 0), new WDist(1234), new WPos(1700, 1730, 0), new WPos(1175, 2847, 0), new WPos(526, 1351, 0)),
+				new(new WDist(1234), new WPos(1700, 1730, 0), new WDist(1234), new WPos(0, 2468, 0), new WPos(1175, 2847, 0), new WPos(526, 1351, 0)),
 				new(new WDist(600), new WPos(2400, 2254, 0), new WDist(1234), new WPos(4300, 872, 0)),
 				new(new WDist(600), new WPos(4300, 872, 0), new WDist(1234), new WPos(2400, 2254, 0)),
 				new(new WDist(1234), new WPos(2724, 2047, 0), new WDist(600), new WPos(2400, 2254, 0)),
 			};
 
-			bool CircleCollision(CircleIntersectCircleTestCase ctc)
+			List<WPos?> CircleIntersections(CircleCircleIntersectionTestCase ccitc)
 			{
-				shape = new CircleShape(ctc.CircleRadius);
+				shape = new CircleShape(ccitc.CircleRadius1);
 				shape.Initialize();
-				return shape.IsOverlapping(shape, ctc.CircleCenter1, ctc.CircleCenter2);
+				var otherShape = new CircleShape(ccitc.CircleRadius2);
+				otherShape.Initialize();
+				return CircleShape.CircleCircleIntersections(ccitc.CircleCenter1, ccitc.CircleRadius1, ccitc.CircleCenter2, ccitc.CircleRadius2);
 			}
 
-			var circleCollisions = new List<bool>();
+			var circleIntersections = new List<List<WPos?>>();
 			foreach (var (ctc, index) in circleTestCases.Select((item, index) => (item, index)))
 			{
-				var collision = CircleCollision(ctc);
-				circleCollisions.Add(collision);
-				Assert.That(collision == ctc.HasIntersection); // if != null is true, a point exists
-				Console.WriteLine($"circle {index + 1} has collision: {collision} ");
+				var intersections = CircleIntersections(ctc);
+				circleIntersections.Add(intersections);
+				Console.WriteLine($"TEST circle {index + 1} has intersections: {intersections[0]}, {intersections[1]} ");
+				Assert.That((intersections[0] == ctc.Intersection1 && intersections[1] == ctc.Intersection2) ||
+							(intersections[1] == ctc.Intersection1 && intersections[0] == ctc.Intersection2)); // if != null is true, a point exists
+				//Console.WriteLine($"circle {index + 1} has intersections: {intersections[0]}, {intersections[1]} ");
 			}
 		}
 

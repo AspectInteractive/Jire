@@ -162,6 +162,36 @@ namespace OpenRA.Mods.Common.HitShapes
 			var crossProduct = ab.X * ac.Y - ab.Y * ac.X;
 			return (int)((Fix64)Math.Abs(crossProduct) / (Fix64)2);
 		}
+		public static List<WPos?> CircleCircleIntersections(WPos selfCenter, WDist selfRadius, WPos otherCenter, WDist otherRadius)
+			=> CircleCircleIntersections((Fix64)selfCenter.X, (Fix64)selfCenter.Y, (Fix64)selfRadius.Length,
+										 (Fix64)otherCenter.X, (Fix64)otherCenter.Y, (Fix64)otherRadius.Length);
+
+		static List<WPos?> CircleCircleIntersections(Fix64 x1, Fix64 y1, Fix64 r1, Fix64 x2, Fix64 y2, Fix64 r2)
+		{
+			var intersections = new List<WPos?>();
+
+			var d = Fix64.Sqrt(Fix64.Pow(x2 - x1, (Fix64)2) + Fix64.Pow(y2 - y1, (Fix64)2));
+
+			if (d >= r1 + r2)
+			{
+				intersections.Add(null);
+				intersections.Add(null);
+				return intersections;
+			}
+
+			var a = (Fix64.Pow(r1, (Fix64)2) - Fix64.Pow(r2, (Fix64)2) + Fix64.Pow(d, (Fix64)2)) / ((Fix64)2 * d);
+			var h = Fix64.Sqrt(Fix64.Pow(r1, (Fix64)2) - Fix64.Pow(a, (Fix64)2));
+			var xm = x1 + a * (x2 - x1) / d;
+			var ym = y1 + a * (y2 - y1) / d;
+			var xs1 = xm + h * (y2 - y1) / d;
+			var xs2 = xm - h * (y2 - y1) / d;
+			var ys1 = ym - h * (x2 - x1) / d;
+			var ys2 = ym + h * (x2 - x1) / d;
+
+			intersections.Add(new WPos((int)xs1, (int)ys1, 0));
+			intersections.Add(new WPos((int)xs2, (int)ys2, 0));
+			return intersections;
+		}
 
 		bool IHitShape.LineIsColliding(WPos circleCenter, WPos p1, WPos p2) => LineIsCollidingLogic(circleCenter, p1, p2);
 
