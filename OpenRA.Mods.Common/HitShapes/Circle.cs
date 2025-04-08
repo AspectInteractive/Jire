@@ -46,6 +46,17 @@ namespace OpenRA.Mods.Common.HitShapes
 			if (VerticalTopOffset < VerticalBottomOffset)
 				throw new YamlException("VerticalTopOffset must be equal to or higher than VerticalBottomOffset.");
 		}
+		bool IHitShape.IsOverlapping(IHitShape shape, WPos selfCenter, WPos otherCenter)
+		{
+			if (shape is CircleShape circleShape)
+				return IsOverlapping(circleShape, selfCenter, otherCenter);
+
+			// If it is called with an overlapping shape that is not a circle, we have not yet implemented this
+			throw new NotImplementedException();
+		}
+
+		internal bool IsOverlapping(CircleShape otherCircle, WPos selfCenter, WPos otherCircleCenter)
+			=> (Radius + otherCircle.Radius).Length > (otherCircleCenter - selfCenter).Length;
 
 		public WDist DistanceFromEdge(in WVec v)
 		{

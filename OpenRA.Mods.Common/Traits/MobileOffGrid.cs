@@ -26,9 +26,6 @@ using OpenRA.Traits;
 using TagLib.Riff;
 using OpenRA.Mods.Common.HitShapes;
 using static OpenRA.Mods.Common.Traits.MobileOffGrid;
-using RVO;
-
-
 
 #pragma warning disable SA1513 // Closing brace should be followed by blank line
 
@@ -291,7 +288,11 @@ namespace OpenRA.Mods.Common.Traits
 		readonly int creationActivityDelay;
 		readonly bool notify = true;
 
-		public enum MovementState { Undefined, Blocked, Seeking, Starting, Stopped, Repathing, FinishedTarget, Ending, FailedStuck, FailedStuckButNotLastTarget }
+		public enum MovementState
+		{
+			Undefined, Blocked, Seeking, Starting, Stopped,
+			Repathing, FinishedTarget, Ending, FailedStuck, FailedStuckButNotLastTarget
+		}
 
 		public MovementState CurrMovementState = MovementState.Undefined;
 
@@ -326,16 +327,6 @@ namespace OpenRA.Mods.Common.Traits
 		WPos cachedPosition;
 		WAngle cachedFacing;
 
-		public AgentPreset DefaultAgentPreset = new
-			(
-			neighborDist: 15.0f * 150,
-			maxNeighbors: 10 * 150,
-			timeHorizon: 5.0f * 150,
-			timeHorizonObst: 5.0f * 150,
-			radius: 2.0f * 150,
-			maxSpeed: 2.0f * 150,
-			velocity: new Vector2(0.0f, 0.0f));
-
 		public WPos CurrPathTarget;
 		public WPos LastPathTarget;
 		public WPos LastCompletedTarget;
@@ -346,7 +337,7 @@ namespace OpenRA.Mods.Common.Traits
 		public List<WPos> PathComplete = new();
 		public List<WPos> PositionBuffer = new();
 		public int PositionBufferCapacity = 20;
-		public int TraversedCirclesBufferCapacity = 10;
+		public int TraversedCirclesBufferCapacity = 5;
 		public WDist LocalAvoidanceDist => UnitRadius * 2;
 		public List<WPos> TraversedCirclesBuffer = new();
 
@@ -697,149 +688,10 @@ namespace OpenRA.Mods.Common.Traits
 		// It needs to be scaled by MovementSpeed before being used
 		public WVec GetDeltaMovement() => new(new WDist(MovementSpeed), WRot.FromYaw(Delta.Yaw));
 
-		bool UnitHasCollidedWithUnits(WVec mv) => ActorsCollidingWithActorBool(CenterPosition, mv,
-			LocalAvoidanceDist, Locomotor, attackingUnitsOnly: true);
-
-		public void UpdateSeekVecWithLocalAvoidance()
+		public bool UnitHasCollidedWithUnitsOrPastTraversal(WVec mv)
 		{
-
-#pragma warning disable SA1137 // Elements should have the same indentation
-			List<int> localAvoidanceAngleOffsetsLeft = new()
-			{
-				 0, -64, -128, -192,
-				-256, -320, -384,
-				-448, -512, -576,
-				-640, -704, -768,
-				-832, -896, -960,
-				-1024
-			};
-
-			List<int> localAvoidanceAngleOffsetsRight = new()
-			{
-				 0, 64,  128,  192,
-				 256,  320,  384,
-				 448,  512,  576,
-				 640,  704,  768,
-				 832,  896,  960,
-				 1024
-			};
-#pragma warning restore SA1137 // Elements should have the same indentation*/
-
-			if (SeekVectors.Count == 0)
-				return;
-
-			// moveVec is equal to the Seekector
-			var moveVec = SeekVectors[0].Vec;
-
-			static bool PosIsToTheLeft(WPos p1, WPos p2, WPos checkPos)
-				=> (p2.X - p1.X) * (checkPos.Y - p1.Y) - (p2.Y - p1.Y) * (checkPos.X - p1.X) > 0;
-
-			// Only change the SeekVector if either we are not searching for the next target, or we are colliding with an object, otherwise continue
-			// Revert to deltaMoveVec if we are no longer searching for the next target
-			//if (!(useLocalAvoidance && UnitHasCollidedWithUnits(moveVec)) && !mobileOffGrid.SearchingForNextTarget)
-			//{
-			//	mobileOffGrid.SeekVectors = new List<MvVec>() { new(deltaMoveVec) };
-			//	moveVec = deltaMoveVec;
-			//}
-			// Since the pathfinder avoids map obstacles, this must be a unit obstacle, so we employ our local avoidance strategy
-			if (useLocalAvoidance && UnitHasCollidedWithUnits(moveVec))
-			{
-				var avoidanceVec = WVec.Zero;
-				var revisedMoveVec = moveVec;
-				var localAvoidanceAngleOffset = 0;
-				var i = 0;
-				do
-				{
-					var actorUnitIsCollidingWith = ActorsCollidingWithActor(CenterPosition, moveVec,
-						LocalAvoidanceDist, Locomotor, attackingUnitsOnly: true).FirstOrDefault();
-					MobileOffGrid collidingMobileOG;
-
-					if (actorUnitIsCollidingWith != null)
-					{
-						var localAvoidanceMove = new WVec(LocalAvoidanceDist, WRot.FromYaw(moveVec.Yaw));
-						collidingMobileOG = actorUnitIsCollidingWith.TraitsImplementing<MobileOffGrid>().FirstOrDefault(Exts.IsTraitEnabled);
-						Overlay.AddCircle(collidingMobileOG.CenterPosition, collidingMobileOG.UnitRadius,
-							(int)PersistConst.Never, 1, OverlayKeyStrings.LocalAvoidance);
-
-						// We take the angle from the unit's current _movement destination_ NOT from the unit's current center position.
-						// This gives us the offset that we need
-						var angleDistToCollidingActor = collidingMobileOG.CenterPosition - (CenterPosition + localAvoidanceMove);
-						var checkLeft = PosIsToTheLeft(CenterPosition,
-										 CenterPosition + new WVec(LocalAvoidanceDist, WRot.FromYaw(moveVec.Yaw)),
-										 LastPathTarget);
-
-						if (checkLeft)
-							localAvoidanceAngleOffset = localAvoidanceAngleOffsetsLeft[i];
-						else
-							localAvoidanceAngleOffset = localAvoidanceAngleOffsetsRight[i];
-
-						//var p1 = CenterPosition;
-						//var p2 = CenterPosition + moveVec * 3;
-						//Overlay.AddLine(p1, p2, Color.Orange, 16, LineEndPoint.EndArrow, key: OverlayKeyStrings.LocalAvoidance);
-
-						//p1 = CenterPosition + moveVec * 3;
-						//p2 = p1 + angleDistToCollidingActor;
-						//Overlay.AddLine(p1, p2, Color.BlueViolet, 16, LineEndPoint.EndArrow, key: OverlayKeyStrings.LocalAvoidance);
-
-						//p1 = CenterPosition + moveVec * 3;
-						//p2 = p1 + new WVec(new WDist((moveVec * 3).Length), WRot.FromYaw(moveVec.Yaw + angleDistToCollidingActor.Yaw));
-						//Overlay.AddLine(p1, p2, Color.Green, 16, LineEndPoint.EndArrow, key: OverlayKeyStrings.LocalAvoidance);
-
-						// NOTE: localAvoidanceAngleOffset is initially 0, ensuring that the normal collision is tested first.
-						// TO DO: Identify why going up does not cause change, most likely has something to do with Yaw being very small
-
-						avoidanceVec = new WVec(new WDist(moveVec.Length),
-													  WRot.FromYaw(angleDistToCollidingActor.Yaw +
-														new WAngle(checkLeft ? 256 : -256) +
-														new WAngle(localAvoidanceAngleOffset)));
-						//var newMoveVec = new WVec(new WDist(moveVec.Length),
-						//						  WRot.FromYaw(moveVec.Yaw
-						//						  + angleDistToCollidingActor.Yaw
-						//						  //+ angleDistToCollidingActor.Yaw
-						//						  //+ new WAngle(localAvoidanceAngleOffset)
-						//						  ));
-
-						var p1 = CenterPosition;
-						var p2 = CenterPosition + avoidanceVec * 3;
-						Overlay.AddLine(p1, p2, Color.Green, 16, LineEndPoint.EndArrow, key: OverlayKeyStrings.LocalAvoidance);
-
-						//Overlay.AddText(CenterPosition, checkLeft.ToString(), Color.LightCyan, (int)PersistConst.Never, key: OverlayKeyStrings.LocalAvoidance);
-						//revisedMoveVec = newMoveVec;
-					}
-
-					i++;
-				}
-				while (UnitHasCollidedWithUnits(revisedMoveVec) && i < localAvoidanceAngleOffsetsLeft.Count);
-
-				if (!UnitHasCollidedWithUnits(revisedMoveVec))
-				{
-#if DEBUGWITHOVERLAY
-					//Console.WriteLine($"move.Yaw {moveVec.Yaw}, revisedMove.Yaw: {revisedMoveVec.Yaw}");
-					//RenderLine(self, CenterPosition, CenterPosition + revisedMoveVec);
-					//RenderPoint(self, CenterPosition + revisedMoveVec, Color.LightGreen);
-#endif
-					AddToTraversedCirclesBuffer(self.CenterPosition + revisedMoveVec);
-					MoveOffGrid.RenderCircleColorCollDebug(self, CenterPosition + revisedMoveVec, UnitRadius, Color.LightGreen, 3);
-					currLocalAvoidanceAngleOffset = localAvoidanceAngleOffset;
-					//RenderLine(CenterPosition, CenterPosition + revisedMoveVec * 4, LineType.LocalAvoidanceDirection);
-					pastMoveVec = moveVec;
-					SeekVectors = new List<MvVec>() { new(revisedMoveVec, 6) };
-					SearchingForNextTarget = true;
-					IsBlocked = false;
-				}
-				//else // since we cannot move without colliding, we stop trying
-				//{
-				//	EndingActions();
-				//	return Complete();
-				//}
-			}
-			else if (useLocalAvoidance && currLocalAvoidanceAngleOffset != 0 && SearchingForNextTarget && !UnitHasCollidedWithUnits(pastMoveVec))
-			{
-				SetForcedFacing(-WAngle.ArcTan(CenterPosition.Y - CurrPathTarget.Y, CenterPosition.X - CurrPathTarget.X) + new WAngle(256));
-				pastMoveVec = new WVec(0, 0, 0);
-				currLocalAvoidanceAngleOffset = 0;
-				SearchingForNextTarget = false;
-			}
+			return ActorsCollidingWithActorBool(CenterPosition, mv, LocalAvoidanceDist, Locomotor, attackingUnitsOnly: true)
+				|| TraversedCircleCollidingWithActorBool(CenterPosition, mv, LocalAvoidanceDist, Locomotor);
 		}
 
 		public void AddCellCollisionFleeVectors()
@@ -884,7 +736,7 @@ namespace OpenRA.Mods.Common.Traits
 			RenderPathingStats();
 			//RenderCurrPathTarget();
 
-			UpdateSeekVecWithLocalAvoidance();
+			//UpdateSeekVecWithLocalAvoidance();
 			AddCellCollisionFleeVectors();
 
 			// Remove vectors if unit is blocked
@@ -896,7 +748,7 @@ namespace OpenRA.Mods.Common.Traits
 
 			if (move == WVec.Zero &&
 			   (GenFinalWVec(WVecTypes.Seek, false) != -GenFinalWVec(WVecTypes.Flee, false) ||
-				(GenFinalWVec(WVecTypes.Seek, false) == WVec.Zero && GenFinalWVec(WVecTypes.Seek, false) == WVec.Zero))
+				(GenFinalWVec(WVecTypes.Seek, false) == WVec.Zero && GenFinalWVec(WVecTypes.Flee, false) == WVec.Zero))
 			   )
 				return;
 
@@ -1093,13 +945,35 @@ namespace OpenRA.Mods.Common.Traits
 		public bool ActorsCollidingWithActorBool(WPos selfPos, WVec move, WDist lookAheadDist, Locomotor locomotor, bool attackingUnitsOnly = true)
 			=> GetCollidingActorsAfterUnitMovement(selfPos, move, lookAheadDist, locomotor, attackingUnitsOnly).Any();
 
-		public IEnumerable<Actor> GetCollidingActorsAfterUnitMovement(WPos selfPos, WVec move, WDist lookAheadDist, Locomotor locomotor, bool attackingUnitsOnly = true)
+		public bool TraversedCircleCollidingWithActorBool(WPos selfPos, WVec move, WDist lookAheadDist, Locomotor locomotor)
+		{
+			foreach (var travCirclePos in TraversedCirclesBuffer)
+			{
+				var travCircle = new CircleShape(UnitRadius); // traversed circles have the same radius as self
+				var newMoveVec = new WVec(lookAheadDist, WRot.FromYaw(move.Yaw));
+				var newCenter = selfPos + newMoveVec;
+				var collision = travCircle.IsOverlapping(travCircle, travCirclePos, newCenter);
+				if (collision)
+				{
+#if DEBUGWITHOVERLAY
+					//Overlay.AddLine(source, dest, Color.LightSalmon, persist: 32, LineEndPoint.EndArrow, key: OverlayKeyStrings.LocalAvoidance);
+#endif
+					//Overlay.AddCircle(travCirclePos, UnitRadius, Color.Black, (int)PersistConst.Always, 1, OverlayKeyStrings.LocalAvoidance);
+					return true;
+				}
+			}
+
+			return false; // no collisions
+		}
+
+		public IEnumerable<Actor> GetCollidingActorsAfterUnitMovement(WPos selfPos, WVec move, WDist lookAheadDist, Locomotor locomotor,
+			bool attackingUnitsOnly = true)
 		{
 			var actorsColliding = new List<Actor>();
 
 			// Ray cast to actor collisions
 			// First get all actors surrounding the unit by the appropriate movement amount
-			foreach (var destActor in self.World.FindActorsInCircle(selfPos, UnitRadius + new WDist(move.Length) + lookAheadDist)
+			foreach (var destActor in self.World.FindActorsInCircle(selfPos, UnitRadius * 2 + new WDist(move.Length) + lookAheadDist)
 												.Where(a => a != self && (!attackingUnitsOnly || ActorIsAiming(a))))
 			{
 				var destActorMobileOffGrid = destActor.TraitsImplementing<MobileOffGrid>().FirstOrDefault(Exts.IsTraitEnabled);
@@ -1113,27 +987,27 @@ namespace OpenRA.Mods.Common.Traits
 						//MoveOffGrid.RenderPointCollDebug(self, destActorCenter, Color.LightGreen);
 #endif
 						foreach (var destShape in destActor.TraitsImplementing<HitShape>().Where(Exts.IsTraitEnabled))
-							if (destShape.Info.Type is CircleShape shape)
+							if (destShape.Info.Type is CircleShape destCircleShape)
 							{
-								var newMoveVec = new WVec(lookAheadDist, WRot.FromYaw(move.Yaw));
+								var newCenter = selfPos + move;
+								//var newCenter = selfPos + GenFinalWVec();
+								//var newCenterLookAhead = selfPos + lookAheadMoveVec;
+								var collision = destShape.Info.Type.IsOverlapping(destCircleShape, destActorCenter, newCenter);
+								//var collisionLookAhead = destShape.Info.Type.IsOverlapping(destCircleShape, destActorCenter, newCenterLookAhead);
 
-								foreach (var (source, dest) in GenSDPairs(selfPos, newMoveVec, shape))
+								if (collision) // || collisionLookAhead)
 								{
-									var collision = destShape.Info.Type.LineIntersectsOrIsInside(destActor.CenterPosition, source, dest);
-									if (collision && !actorsColliding.Contains(destActor))
-									{
 #if DEBUGWITHOVERLAY
-										//Overlay.AddLine(source, dest, Color.LightSalmon, persist: 32, LineEndPoint.EndArrow, key: OverlayKeyStrings.LocalAvoidance);
+									//Overlay.AddLine(source, dest, Color.LightSalmon, persist: 32, LineEndPoint.EndArrow, key: OverlayKeyStrings.LocalAvoidance);
 #endif
-										actorsColliding.Add(destActor);
-										yield return destActor;
-									}
-									else
-									{
+									actorsColliding.Add(destActor);
+									yield return destActor;
+								}
+								else
+								{
 #if DEBUGWITHOVERLAY
-										//Overlay.AddLine(source, dest, Color.LightGreen, persist: 32, LineEndPoint.EndArrow, key: OverlayKeyStrings.LocalAvoidance);
+									//Overlay.AddLine(source, dest, Color.LightGreen, persist: 32, LineEndPoint.EndArrow, key: OverlayKeyStrings.LocalAvoidance);
 #endif
-									}
 								}
 							}
 					}

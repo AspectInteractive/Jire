@@ -58,6 +58,11 @@ namespace OpenRA.Mods.Common.HitShapes
 				squares[i] = (Points[i] - Points[i - 1]).LengthSquared;
 		}
 
+		bool IHitShape.IsOverlapping(IHitShape shape, WPos selfCenter, WPos otherCenter)
+		{
+			throw new NotImplementedException();
+		}
+
 		static int DistanceSquaredFromLineSegment(int2 c, int2 a, int2 b, int ab2)
 		{
 			var ac = c - a;

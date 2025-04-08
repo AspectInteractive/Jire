@@ -61,6 +61,10 @@ namespace OpenRA.Mods.Common.HitShapes
 
 			OuterRadius = Radius + new WDist(Math.Max(PointA.Length, PointB.Length));
 		}
+		bool IHitShape.IsOverlapping(IHitShape shape, WPos selfCenter, WPos otherCenter)
+		{
+			throw new NotImplementedException();
+		}
 
 		public WDist DistanceFromEdge(in WVec v)
 		{

@@ -103,6 +103,10 @@ namespace OpenRA.Mods.Common.HitShapes
 				new(BottomRight.X, BottomRight.Y, VerticalBottomOffset),
 			};
 		}
+		bool IHitShape.IsOverlapping(IHitShape shape, WPos selfCenter, WPos otherCenter)
+		{
+			throw new NotImplementedException();
+		}
 
 		public WDist DistanceFromEdge(in WVec v)
 		{

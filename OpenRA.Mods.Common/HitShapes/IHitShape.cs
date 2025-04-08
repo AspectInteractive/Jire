@@ -28,5 +28,6 @@ namespace OpenRA.Mods.Common.HitShapes
 		IEnumerable<IRenderable> RenderDebugOverlay(HitShape hs, WorldRenderer wr, WPos origin, WRot orientation);
 		bool LineIntersectsOrIsInside(WPos selfCenter, WPos p1, WPos p2);
 		bool LineIsColliding(WPos selfCEnter, WPos p1, WPos p2);
+		bool IsOverlapping(IHitShape shape, WPos selfCenter, WPos otherCenter);
 	}
 }
