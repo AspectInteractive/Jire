@@ -46,7 +46,7 @@ namespace OpenRA.Mods.Common.Commands
 		{
 			{ "combat-geometry", (CombatGeometryDescription, CombatGeometry, true) },
 			{ "render-geometry", (RenderGeometryDescription, RenderGeometry, true) },
-			{ "mogg", (MobileOffGridGeometryDescription, MobileOffGridGeometry, false) },
+			{ "mogg", (MobileOffGridGeometryDescription, MobileOffGridGeometry, true) },
 			{ "screen-map", (ScreenMapOverlayDescription, ScreenMap, true) },
 			{ "depth-buffer", (DepthBufferDescription, DepthBuffer, true) },
 			{ "actor-tags", (ActorTagsOverlayDescripition, ActorTags, true) },

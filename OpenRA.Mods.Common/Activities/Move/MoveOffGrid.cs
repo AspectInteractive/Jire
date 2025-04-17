@@ -325,12 +325,7 @@ namespace OpenRA.Mods.Common.Activities
 		// Attack Move Move
 		public MoveOffGrid(Actor self, in List<Actor> groupedActors, in Target t, WDist minRange, WDist maxRange,
 			WPos? initialTargetPosition = null, Color? targetLineColor = null)
-			: this(self, groupedActors, t, initialTargetPosition, targetLineColor)
-		{
-#if DEBUG || DEBUGWITHOVERLAY
-			//Console.WriteLine($"Target is {target}");
-			//Console.WriteLine("MoveOffGrid created at " + DateTime.Now.Ticks / TimeSpan.TicksPerMillisecond);
-#endif
+			: this(self, groupedActors, t, initialTargetPosition, targetLineColor)		{
 			this.maxRange = maxRange;
 			this.minRange = minRange;
 			locomotor = self.World.WorldActor.TraitsImplementing<Locomotor>().FirstEnabledTraitOrDefault();
@@ -453,13 +448,6 @@ namespace OpenRA.Mods.Common.Activities
 				return left <= target.X && right >= target.X && top <= target.Y && bottom >= target.Y;
 			}
 #pragma warning restore IDE0061 // Use expression body for local function
-
-#if DEBUGWITHOVERLAY
-			//RenderPointCollDebug(self, new WPos(actorsSharingMoveXYBounds.MinX, actorsSharingMoveXYBounds.MinY, 0));
-			//RenderPointCollDebug(self, new WPos(actorsSharingMoveXYBounds.MinX, actorsSharingMoveXYBounds.MaxY, 0));
-			//RenderPointCollDebug(self, new WPos(actorsSharingMoveXYBounds.MaxX, actorsSharingMoveXYBounds.MinY, 0));
-			//RenderPointCollDebug(self, new WPos(actorsSharingMoveXYBounds.MaxX, actorsSharingMoveXYBounds.MaxY, 0));
-#endif
 
 			if (ActorsSharingMove.Count > 1 && actorsSharingMoveWithProps.All(a => a.IsOffsetTargetObservable && a.IsOffsetCloseEnough)
 				&& !TargetWithinBounds(actorsSharingMoveXYBounds.MinX, actorsSharingMoveXYBounds.MaxX,
@@ -604,12 +592,6 @@ namespace OpenRA.Mods.Common.Activities
 
 			if (hasReachedGoal)
 			{
-#if DEBUG || DEBUGWITHOVERLAY
-				//mobileOffGrid.Overlay.AddCircle(mobileOffGrid.CenterPosition, mobileOffGrid.UnitRadius, Color.Pink,
-				//	(int)MobileOffGridOverlay.PersistConst.Never, 3, MobileOffGridOverlay.OverlayKeyStrings.Pathing);
-				// System.Console.WriteLine($"if (delta.HorizontalLengthSquared < move.HorizontalLengthSquared) = {Delta.HorizontalLengthSquared < move.HorizontalLengthSquared}");
-#endif
-
 				if (Delta.HorizontalLengthSquared != 0 && selfHasReachedGoal)
 				{
 					// Ensure we don't include a non-zero vertical component here that would move us away from CruiseAltitude
@@ -761,11 +743,9 @@ namespace OpenRA.Mods.Common.Activities
 
 				if (!mobileOffGrid.UnitHasCollidedWithUnitsOrPastTraversal(revisedMoveVec))
 				{
-#if DEBUGWITHOVERLAY
 					//Console.WriteLine($"move.Yaw {moveVec.Yaw}, revisedMove.Yaw: {revisedMoveVec.Yaw}");
 					//RenderLine(self, CenterPosition, CenterPosition + revisedMoveVec);
 					//RenderPoint(self, CenterPosition + revisedMoveVec, Color.LightGreen);
-#endif
 					//mobileOffGrid.AddToTraversedCirclesBuffer(mobileOffGrid.CenterPosition + revisedMoveVec);
 					mobileOffGrid.AddToTraversedCirclesBuffer(mobileOffGrid.CenterPosition); // Add blocker at current position
 					mobileOffGrid.Overlay.AddCircle(mobileOffGrid.CenterPosition + revisedMoveVec, mobileOffGrid.UnitRadius,

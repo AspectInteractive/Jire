@@ -486,10 +486,7 @@ namespace OpenRA.Mods.Common.Pathfinder
 				// path.Add(sourcePos);
 				path.Add(new PathPos(destPos));
 
-#if DEBUGWITHOVERLAY
 				RenderPathIfOverlay(path.ConvertAll(pp => pp.wPos));
-#endif
-
 				EndingActions(true);
 			}
 
@@ -577,9 +574,6 @@ namespace OpenRA.Mods.Common.Pathfinder
 						newCellCandidates.Add(nc);
 			}
 
-			foreach (var c in newCandidates)
-				MoveOffGrid.RenderCircleCollDebug(self, world.Map.WPosFromCCPos(c), new WDist(1024));
-
 			var distFromDest = int.MaxValue;
 			var bestCandidate = newCandidates[0];
 
@@ -617,9 +611,7 @@ namespace OpenRA.Mods.Common.Pathfinder
 				// path.Add(sourcePos);
 				path.Reverse();
 
-#if DEBUGWITHOVERLAY
 				RenderPathIfOverlay(new List<WPos>() { Source }.Union(path.Select(pp => pp.wPos).ToList()).ToList());
-#endif
 			}
 			else
 				path = EmptyPath;
@@ -659,9 +651,7 @@ namespace OpenRA.Mods.Common.Pathfinder
 					// and add your own. This will let you re-use costs found earlier.
 					var succState = GetState(minStateNeighbours.ElementAt(i));
 
-#if DEBUGWITHOVERLAY
 					succState.RenderInIfOverlay(thisWorld);
-#endif
 
 					if (!ClosedList.Any(state => state.CC == succState.CC))
 					{

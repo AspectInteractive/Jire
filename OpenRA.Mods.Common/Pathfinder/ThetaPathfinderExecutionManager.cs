@@ -152,6 +152,11 @@ namespace OpenRA.Mods.Common.Traits
 		{
 			PlayerCirclesLocked = true;
 			var world = actor.World;
+
+			// Clear any existing rendered paths
+			var overlay = world.WorldActor.TraitsImplementing<ThetaStarPathfinderOverlay>().FirstEnabledTraitOrDefault();
+			overlay.ClearPaths();
+
 			// Bypass circle logic if distance to target is small enough
 			if (!GreaterThanMinDistanceForCircles(actor, targetPos) || sharedMoveActors == null)
 			{
@@ -198,14 +203,11 @@ namespace OpenRA.Mods.Common.Traits
 						!SliceIsBlockedByCell(actor, circle.CircleCenter, sliceIndex) &&
 						!actor.Trait<MobileOffGrid>().HasCollidedWithCell(actor.CenterPosition, circle.CircleCenter, locomotor))
 					{
-#if DEBUGWITHOVERLAY
 						//MoveOffGrid.RenderCircle(actor, circle.CircleCenter, circle.CircleRadius, ThetaStarPathfinderOverlay.OverlayKeyStrings.Circles);
 						//Slice Line is the standard sliceAngle * index to get the slice
 						var sliceLine = GetSliceLine(circle.CircleCenter, circle.CircleRadius, sliceAngle, sliceIndex);
 						MoveOffGrid.RenderLineWithColor(actor, sliceLine[0], sliceLine[1],
 														Color.DarkBlue, ThetaStarPathfinderOverlay.OverlayKeyStrings.Circles);
-#endif
-
 						var circleSliceIndex = new CircleSliceIndex(playerCircleGroupIndex, circleIndex, sliceIndex);
 						if (!ActorOrdersInCircleSlices.ContainsKey(circleSliceIndex))
 							ActorOrdersInCircleSlices[circleSliceIndex] = new List<ActorWithOrder>();
@@ -220,18 +222,13 @@ namespace OpenRA.Mods.Common.Traits
 					// Create the circle
 					playerCircleGroups[playerCircleGroupIndex].Add(new ThetaCircle(actor.CenterPosition, new WDist(radiusForSharedThetas)));
 					var circle = playerCircleGroups[playerCircleGroupIndex].Last();
-#if DEBUGWITHOVERLAY
-					//MoveOffGrid.RenderCircle(actor, circle.CircleCenter, circle.CircleRadius, ThetaStarPathfinderOverlay.OverlayKeyStrings.Circles);
-#endif
 					var circleIndex = playerCircleGroups[playerCircleGroupIndex].Count - 1;
 					var sliceIndex = CircleShape.CalcCircleSliceIndex(circle.CircleCenter, circle.CircleRadius.Length,
 																		actor.CenterPosition, sliceAngle);
-#if DEBUGWITHOVERLAY
 					//Slice Line is the standard sliceAngle * index to get the slice
 					var sliceLine = GetSliceLine(circle.CircleCenter, circle.CircleRadius, sliceAngle, sliceIndex);
 					MoveOffGrid.RenderLineWithColor(actor, sliceLine[0], sliceLine[1],
 													Color.DarkBlue, ThetaStarPathfinderOverlay.OverlayKeyStrings.Circles);
-#endif
 					var circleSliceIndex = new CircleSliceIndex(playerCircleGroupIndex, circleIndex, sliceIndex);
 					if (!ActorOrdersInCircleSlices.ContainsKey(circleSliceIndex))
 						ActorOrdersInCircleSlices[circleSliceIndex] = new List<ActorWithOrder>();

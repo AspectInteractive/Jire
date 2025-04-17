@@ -97,16 +97,15 @@ namespace OpenRA.Mods.Common.Traits
 
 		void IChatCommand.InvokeCommand(string name, string arg)
 		{
-			// Only enable/disable if no argument is passed
-			if (Comms.Any(comm => comm.Name == name) && string.IsNullOrEmpty(arg))
+			if (Comms.Any(comm => comm.Name == name))
 			{
 				Enabled ^= true;
 				ToggleVisibility("");
-			}
 
-			// If the overlay does not exist and cannot be removed, then we add it
-			if (validChatCommandArgs.Any(validArg => arg == validArg) && !enabledOverlays.Remove(arg))
-				enabledOverlays.Add(arg);
+				// If the overlay does not exist and cannot be removed, then we add it
+				if (validChatCommandArgs.Any(validArg => arg == validArg) && !enabledOverlays.Remove(arg))
+					enabledOverlays.Add(arg);
+			}
 		}
 
 		public static void GenericLinkedPointsFunc<T1>(List<T1> pointList, int pointListLen, Action<T1, T1> funcOnLinkedPoints)

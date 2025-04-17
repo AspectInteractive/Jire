@@ -955,9 +955,6 @@ namespace OpenRA.Mods.Common.Traits
 				var collision = travCircle.IsOverlapping(travCircle, travCirclePos, newCenter);
 				if (collision)
 				{
-#if DEBUGWITHOVERLAY
-					//Overlay.AddLine(source, dest, Color.LightSalmon, persist: 32, LineEndPoint.EndArrow, key: OverlayKeyStrings.LocalAvoidance);
-#endif
 					//Overlay.AddCircle(travCirclePos, UnitRadius, Color.Black, (int)PersistConst.Always, 1, OverlayKeyStrings.LocalAvoidance);
 					return true;
 				}
@@ -983,9 +980,6 @@ namespace OpenRA.Mods.Common.Traits
 					var destActorCenter = destActor.CenterPosition + destActorMobileOffGrid.GenFinalWVec();
 					if (destActorCenter != WPos.Zero)
 					{
-#if DEBUGWITHOVERLAY
-						//MoveOffGrid.RenderPointCollDebug(self, destActorCenter, Color.LightGreen);
-#endif
 						foreach (var destShape in destActor.TraitsImplementing<HitShape>().Where(Exts.IsTraitEnabled))
 							if (destShape.Info.Type is CircleShape destCircleShape)
 							{
@@ -997,17 +991,8 @@ namespace OpenRA.Mods.Common.Traits
 
 								if (collision) // || collisionLookAhead)
 								{
-#if DEBUGWITHOVERLAY
-									//Overlay.AddLine(source, dest, Color.LightSalmon, persist: 32, LineEndPoint.EndArrow, key: OverlayKeyStrings.LocalAvoidance);
-#endif
 									actorsColliding.Add(destActor);
 									yield return destActor;
-								}
-								else
-								{
-#if DEBUGWITHOVERLAY
-									//Overlay.AddLine(source, dest, Color.LightGreen, persist: 32, LineEndPoint.EndArrow, key: OverlayKeyStrings.LocalAvoidance);
-#endif
 								}
 							}
 					}
@@ -1695,7 +1680,7 @@ namespace OpenRA.Mods.Common.Traits
 
 		public static List<TraitPair<MobileOffGrid>> GetGroupedActorsWithMobileOGs(List<Actor> groupedActors)
 		{
-			return groupedActors.Where(a => !a.IsDead && a.TraitsImplementing<MobileOffGrid>().Any())
+			return groupedActors.Where(a => a != null && !a.IsDead && a.TraitsImplementing<MobileOffGrid>().Any())
 				.Select(a => new TraitPair<MobileOffGrid>(a, a.TraitsImplementing<MobileOffGrid>().FirstOrDefault(Exts.IsTraitEnabled)))
 				.ToList();
 		}
