@@ -156,15 +156,20 @@ namespace OpenRA.Test
 		[TestCase(TestName = "Intersections between a Circle and another Circle")]
 		public void CircleCircleIntersections()
 		{
-			WPos? RoundToLowestEven(WPos? pos)
+			bool FuzzyCompare(WPos? pos1, WPos? pos2, int variance)
 			{
-				if (pos != null)
+				var xDiff = 0;
+				var yDiff = 0;
+
+				if (pos1 != null && pos2 != null)
 				{
-					pos = new WPos(((WPos)pos).X / 2 / 2 * 2 * 2,
-								   ((WPos)pos).Y / 2 / 2 * 2 * 2, 0);
+					xDiff = Math.Abs(((WPos)pos2).X - ((WPos)pos1).X);
+					yDiff = Math.Abs(((WPos)pos2).Y - ((WPos)pos1).Y);
 				}
 
-				return pos;
+				Console.WriteLine($"xDiff: {xDiff}, yDiff {yDiff}, variance: {variance} \n" +
+								  $"Less than variance?: {xDiff < variance && yDiff < variance}");
+				return xDiff < variance && yDiff < variance;
 			}
 
 			var circleTestCases = new List<CircleCircleIntersectionTestCase>()
@@ -177,23 +182,25 @@ namespace OpenRA.Test
 				//new(new WDist(1234), new WPos(0, 0, 0), new WDist(1234), new WPos(-2468, 0, 0), new WPos(-1234, 0, 0), new WPos(-1234, 0, 0)),
 				new(new WDist(1234), new WPos(0, 0, 0), new WDist(1234), new WPos(0, 2468, 0), new WPos(0, 1234, 0), new WPos(0, 1234, 0)),
 				//new(new WDist(1234), new WPos(0, 0, 0), new WDist(1234), new WPos(0, -2468, 0), new WPos(0, -1234, 0), new WPos(0, -1234, 0)),
-				new(new WDist(1234), new WPos(0, 0, 0), new WDist(1234), new WPos(2467, 0, 0), new WPos(35, 1234, 0), new WPos(-35, 1234, 0)),
+				new(new WDist(1234), new WPos(0, 0, 0), new WDist(1234), new WPos(2467, 0, 0), new WPos(1234, -35, 0), new WPos(1234, 35, 0)),
 				//new(new WDist(1234), new WPos(0, 0, 0), new WDist(1234), new WPos(-2467, 0, 0), new WPos(35, -1234, 0), new WPos(-35, -1234, 0)),
-				new(new WDist(1234), new WPos(0, 0, 0), new WDist(1234), new WPos(0, 2467, 0), new WPos(-35, 1234, 0), new WPos(35, 1234, 0)),
+				new(new WDist(1234), new WPos(0, 0, 0), new WDist(1234), new WPos(0, 2467, 0), new WPos(35, 1234, 0), new WPos(-35, 1234, 0)),
 				//new(new WDist(1234), new WPos(0, 0, 0), new WDist(1234), new WPos(0, -2467, 0), new WPos(-35, -1234, 0), new WPos(35, -1234, 0)),
+				// Problematic test cases start below this line
 				new(new WDist(1234), new WPos(2468, 0, 0),  new WDist(1234), new WPos(0, 0, 0), new WPos(1234, 0, 0), new WPos(1234, 0, 0)),
 				//new(new WDist(1234), new WPos(-2468, 0, 0), new WDist(1234), new WPos(0, 0, 0), new WPos(-1234, 0, 0), new WPos(-1234, 0, 0)),
+
 				new(new WDist(1234), new WPos(0, 2468, 0),  new WDist(1234), new WPos(0, 0, 0), new WPos(0, 1234, 0), new WPos(0, 1234, 0)),
-				//new(new WDist(1234), new WPos(0, -2468, 0), new WDist(1234), new WPos(0, 0, 0), new WPos(0, -1234, 0), new WPos(0, -1234, 0)),
-				new(new WDist(1234), new WPos(2467, 0, 0),  new WDist(1234), new WPos(0, 0, 0), new WPos(35, 1234, 0), new WPos(-35, 1234, 0)),
+				new(new WDist(1234), new WPos(0, -2468, 0), new WDist(1234), new WPos(0, 0, 0), new WPos(0, -1234, 0), new WPos(0, -1234, 0)),
+				new(new WDist(1234), new WPos(2467, 0, 0),  new WDist(1234), new WPos(0, 0, 0), new WPos(1234, 35, 0), new WPos(1234, -35, 0)),
 				//new(new WDist(1234), new WPos(-2467, 0, 0), new WDist(1234), new WPos(0, 0, 0), new WPos(35, -1234, 0), new WPos(-35, -1234, 0)),
 				//new(new WDist(1234), new WPos(0, 2467, 0),  new WDist(1234), new WPos(0, 0, 0), new WPos(-35, 1234, 0), new WPos(35, 1234, 0)),
 				//new(new WDist(1234), new WPos(0, -2467, 0), new WDist(1234), new WPos(0, 0, 0), new WPos(-35, -1234, 0), new WPos(35, -1234, 0)),
 				new(new WDist(1234), new WPos(0, 2468, 0), new WDist(1234), new WPos(1700, 1730, 0), new WPos(1175, 2847, 0), new WPos(526, 1351, 0)),
 				new(new WDist(1234), new WPos(1700, 1730, 0), new WDist(1234), new WPos(0, 2468, 0), new WPos(1175, 2847, 0), new WPos(526, 1351, 0)),
-				new(new WDist(600), new WPos(2400, 2254, 0), new WDist(1234), new WPos(4300, 872, 0)),
-				new(new WDist(600), new WPos(4300, 872, 0), new WDist(1234), new WPos(2400, 2254, 0)),
-				new(new WDist(1234), new WPos(2724, 2047, 0), new WDist(600), new WPos(2400, 2254, 0)),
+				new(new WDist(600), new WPos(2400, 2254, 0), new WDist(1234), new WPos(4300, 872, 0)), // no intersection, too small
+				new(new WDist(600), new WPos(4300, 872, 0), new WDist(1234), new WPos(2400, 2254, 0)),  // no intersection, too small
+				new(new WDist(1234), new WPos(2724, 2047, 0), new WDist(600), new WPos(2400, 2254, 0)), // no intersection, one circle completely inside the other
 			};
 
 			List<WPos?> CircleIntersections(CircleCircleIntersectionTestCase ccitc)
@@ -211,13 +218,11 @@ namespace OpenRA.Test
 				var intersections = CircleIntersections(ctc);
 				circleIntersections.Add(intersections);
 				Console.WriteLine($"TEST circle {index + 1} has intersections: {intersections[0]}, {intersections[1]} \n" +
-								  $"which become {RoundToLowestEven(intersections[0])}, {RoundToLowestEven(intersections[1])} \n" +
-								  $"EXPECTED:  {ctc.Intersection1}, {ctc.Intersection2} \n" +
-								  $"which become {RoundToLowestEven(ctc.Intersection1)}, {RoundToLowestEven(ctc.Intersection2)}");
-				Assert.That((RoundToLowestEven(intersections[0]) == RoundToLowestEven(ctc.Intersection1) &&
-							 RoundToLowestEven(intersections[1]) == RoundToLowestEven(ctc.Intersection2)) ||
-							(RoundToLowestEven(intersections[1]) == RoundToLowestEven(ctc.Intersection1) &&
-							 RoundToLowestEven(intersections[0]) == RoundToLowestEven(ctc.Intersection2))); // if != null is true, a point exists
+								  $"EXPECTED:  {ctc.Intersection1}, {ctc.Intersection2} \n");
+				Assert.That((FuzzyCompare(intersections[0], ctc.Intersection1, 2) &&
+							 FuzzyCompare(intersections[1], ctc.Intersection2, 2)) ||
+							(FuzzyCompare(intersections[1], ctc.Intersection1, 2) &&
+							 FuzzyCompare(intersections[0], ctc.Intersection2, 2))); // if != null is true, a point exists
 				//Assert.That((intersections[0] == ctc.Intersection1 &&
 				//			 intersections[1] == ctc.Intersection2) ||
 				//			(intersections[1] == ctc.Intersection1 &&

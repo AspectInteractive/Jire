@@ -169,6 +169,35 @@ namespace OpenRA.Mods.Common.HitShapes
 		static List<WPos?> CircleCircleIntersections(Fix64 x1, Fix64 y1, Fix64 r1, Fix64 x2, Fix64 y2, Fix64 r2)
 		{
 			var intersections = new List<WPos?>();
+			var dx = x2 - x1;
+			var dy = y2 - y1;
+			var d = Fix64.Sqrt(dx * dx + dy * dy);
+
+			if (d > r1 + r2 || d < Fix64.Abs(r1 - r2))
+			{
+				intersections.Add(null);
+				intersections.Add(null);
+				return intersections;
+			}
+
+			var a = (r1 * r1 - r2 * r2 + d * d) / ((Fix64)2 * d);
+			var h = Fix64.Sqrt(r1 * r1 - a * a);
+			var xm = x1 + a * dx / d;
+			var ym = y1 + a * dy / d;
+			var xs1 = xm + h * dy / d;
+			var xs2 = xm - h * dy / d;
+			var ys1 = ym - h * dx / d;
+			var ys2 = ym + h * dx / d;
+
+			intersections.Add(new WPos((int)xs1, (int)ys1, 0));
+			intersections.Add(new WPos((int)xs2, (int)ys2, 0));
+
+			return intersections;
+		}
+
+		static List<WPos?> CircleCircleIntersections_Old(Fix64 x1, Fix64 y1, Fix64 r1, Fix64 x2, Fix64 y2, Fix64 r2)
+		{
+			var intersections = new List<WPos?>();
 
 			var d = Fix64.Sqrt(Fix64.Pow(x2 - x1, (Fix64)2) + Fix64.Pow(y2 - y1, (Fix64)2));
 
@@ -190,6 +219,7 @@ namespace OpenRA.Mods.Common.HitShapes
 
 			intersections.Add(new WPos((int)xs1, (int)ys1, 0));
 			intersections.Add(new WPos((int)xs2, (int)ys2, 0));
+
 			return intersections;
 		}
 
