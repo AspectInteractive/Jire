@@ -1,0 +1,56 @@
+   p1: 428,859,0, p2: 2428,1359,0, p3: 0c1, p4: 426,0,0, p5: 1c210
+Closest point: (428, 859)
+rA + rB: 1235
+line 1 has collision: True, expected: True 
+p1: 228,1459,0, p2: 1500,650,0, p3: 0c1, p4: 426,0,0, p5: 1c210
+Closest point: (1029.6589316006, 949.1398776218)
+rA + rB: 1235
+line 2 has collision: True, expected: True 
+p1: -1300,0,0, p2: -300,1800,0, p3: 0c1, p4: 426,0,0, p5: 1c210
+Closest point: (-892.9245283017, 732.7358490564)
+rA + rB: 1235
+line 3 has collision: False, expected: False 
+p1: -300,1800,0, p2: 428,859,0, p3: 0c1, p4: 426,0,0, p5: 1c210
+Closest point: (428, 859)
+rA + rB: 1235
+line 4 has collision: True, expected: True 
+p1: -2000,3000,0, p2: -700,800,0, p3: 0c1, p4: 426,0,0, p5: 1c210
+Closest point: (-700, 800)
+rA + rB: 1235
+line 5 has collision: False, expected: False 
+p1: -3000,-500,0, p2: 3000,-500,0, p3: 0c1, p4: 426,0,0, p5: 1c210
+Closest point: (426, -500)
+rA + rB: 1235
+line 6 has collision: True, expected: True 
+p1: 0,-3000,0, p2: 10,2000,0, p3: 0c1, p4: 426,0,0, p5: 1c210
+Closest point: (6.0016799932, 0.8399966399)
+rA + rB: 1235
+line 7 has collision: True, expected: True 
+p1: -1200,-1200,0, p2: 1200,1800,0, p3: 0c1, p4: 426,0,0, p5: 1c210
+Closest point: (19.9024390243, 324.8780487804)
+rA + rB: 1235
+line 8 has collision: True, expected: True 
+p1: 500,-800,0, p2: 200,-100,0, p3: 0c1, p4: 426,0,0, p5: 1c210
+Closest point: (200, -100)
+rA + rB: 1235
+line 9 has collision: True, expected: True 
+p1: 0,-1000,0, p2: 50,2000,0, p3: 0c1, p4: 426,0,0, p5: 1c210
+Closest point: (16.7803387947, 6.8203276866)
+rA + rB: 1235
+line 10 has collision: True, expected: True 
+p1: 30,-3000,0, p2: 0,2000,0, p3: 0c1, p4: 426,0,0, p5: 1c210
+Closest point: (12.0149034634, -2.483910579)
+rA + rB: 1235
+line 11 has collision: True, expected: True 
+p1: 0,-3000,0, p2: 0,2000,0, p3: 0c1, p4: 426,0,0, p5: 1c210
+Closest point: (0, 0)
+rA + rB: 1235
+line 12 has collision: True, expected: True 
+p1: 10677,36340,0, p2: 13879,36006,0, p3: 0c1, p4: 14067,35637,0, p5: 0c300
+Closest point: (13879, 36006)
+rA + rB: 301
+line 13 has collision: False, expected: False 
+p1: 24517,33142,0, p2: 24739,33699,0, p3: 0c1, p4: 24514,33723,0, p5: 0c300
+Closest point: (24716.4117980823, 33642.3259978916)
+rA + rB: 301
+line 14 has collision: True, expected: True 

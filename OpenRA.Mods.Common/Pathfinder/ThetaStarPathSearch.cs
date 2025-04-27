@@ -483,7 +483,7 @@ namespace OpenRA.Mods.Common.Pathfinder
 			// We do not need to check if the dest is reachable since there are no obstacles to it
 			if (!skipInitialLOSCheck && CcinMap(GetNearestCCPos(destPos)) && IsPathObservable(sourcePos, destPos, mobileOffGrid.UnitHitShape, true, 0))
 			{
-				// path.Add(sourcePos);
+				path.Add(new PathPos(sourcePos));
 				path.Add(new PathPos(destPos));
 
 				RenderPathIfOverlay(path.ConvertAll(pp => pp.wPos));

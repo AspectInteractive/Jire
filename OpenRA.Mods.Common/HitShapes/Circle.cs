@@ -11,6 +11,7 @@
 
 using System;
 using System.Collections.Generic;
+using System.IO;
 using System.Linq;
 using OpenRA.Graphics;
 using OpenRA.Mods.Common.Graphics;
@@ -165,6 +166,54 @@ namespace OpenRA.Mods.Common.HitShapes
 		public static List<WPos?> CircleCircleIntersections(WPos selfCenter, WDist selfRadius, WPos otherCenter, WDist otherRadius)
 			=> CircleCircleIntersections((Fix64)selfCenter.X, (Fix64)selfCenter.Y, (Fix64)selfRadius.Length,
 										 (Fix64)otherCenter.X, (Fix64)otherCenter.Y, (Fix64)otherRadius.Length);
+
+		public static bool DoesCircleAlongLineCollideWithCircle(WPos lineStart, WPos lineEnd, WDist selfRadius, WPos otherCenter, WDist otherRadius)
+		{
+			var t = Math.Max(0, Math.Min(1, (int)(
+												 ((Fix64)(otherCenter.X - lineStart.X) * (Fix64)(lineEnd.X - lineStart.X) +
+												 (Fix64)(otherCenter.Y - lineStart.Y) * (Fix64)(lineEnd.Y - lineStart.Y)) /
+												 (Fix64)((lineEnd.X - lineStart.X) * (lineEnd.X - lineStart.X) + (lineEnd.Y - lineStart.Y) * (lineEnd.Y - lineStart.Y)))));
+			var closestX = (Fix64)lineStart.X + (Fix64)t * (Fix64)(lineEnd.X - lineStart.X);
+			var closestY = (Fix64)lineStart.Y + (Fix64)t * (Fix64)(lineEnd.Y - lineStart.Y);
+			var closestDistance = Fix64.Sqrt(((Fix64)otherCenter.X - closestX) * ((Fix64)otherCenter.X - closestX) +
+											 ((Fix64)otherCenter.Y - closestY) * ((Fix64)otherCenter.Y - closestY));
+
+			return (int)closestDistance <= selfRadius.Length + otherRadius.Length;
+		}
+
+		public static Fix64 Fix64Min(Fix64 val1, Fix64 val2) => val1 < val2 ? val1 : val2;
+		public static Fix64 Fix64Max(Fix64 val1, Fix64 val2) => val1 > val2 ? val1 : val2;
+
+		public static Fix64 ClosestDistance(WPos lineStart, WPos lineEnd, WPos otherCenter)
+		{
+			const int FractionalBits = 16;
+
+			var (x1, y1) = ((long)lineStart.X, (long)lineStart.Y);
+			var (x2, y2) = ((long)lineEnd.X, (long)lineEnd.Y);
+			var (xc, yc) = ((long)otherCenter.X, (long)otherCenter.Y);
+
+			var dx = x2 - x1;
+			var dy = y2 - y1;
+
+			var lengthSquared = dx * dx + dy * dy;
+			var dotProduct = (xc - x1) * dx + (yc - y1) * dy;
+			dotProduct = Math.Max(0, Math.Min(lengthSquared, dotProduct));
+
+			var t = (dotProduct << FractionalBits) / lengthSquared;
+			var closestX = x1 + ((dx * t) >> FractionalBits);
+			var closestY = y1 + ((dy * t) >> FractionalBits);
+
+			Console.WriteLine($"Closest point: ({closestX}, {closestY})");
+
+			return Fix64.Sqrt((Fix64)((xc - closestX) * (xc - closestX) + (yc - closestY) * (yc - closestY)));
+		}
+
+		public static bool CheckOverlap(WPos lineStart, WPos lineEnd, WDist selfRadius, WPos otherCenter, WDist otherRadius)
+		{
+			var distance = ClosestDistance(lineStart, lineEnd, otherCenter);
+			Console.WriteLine($"rA + rB: {selfRadius.Length + otherRadius.Length}");
+			return distance <= (Fix64)selfRadius.Length + (Fix64)otherRadius.Length;
+		}
 
 		static List<WPos?> CircleCircleIntersections(Fix64 x1, Fix64 y1, Fix64 r1, Fix64 x2, Fix64 y2, Fix64 r2)
 		{

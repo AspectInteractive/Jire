@@ -51,6 +51,27 @@ namespace OpenRA.Test
 				Is.EqualTo(0));
 		}
 
+		public struct CirclePathOverlapsWithCircleTestCase
+		{
+			public WPos SourceCenter;
+			public WPos DestCenter;
+			public WDist SelfCircleRadius;
+			public WPos OtherCircleCenter;
+			public WDist OtherCircleRadius;
+			public bool Overlaps;
+
+			public CirclePathOverlapsWithCircleTestCase(WPos sourceCenter, WPos destCenter, WDist selfCircleRadius, WPos otherCircleCenter, WDist otherCircleRadius,
+				bool overlaps)
+			{
+				SourceCenter = sourceCenter;
+				DestCenter = destCenter;
+				SelfCircleRadius = selfCircleRadius;
+				OtherCircleCenter = otherCircleCenter;
+				OtherCircleRadius = otherCircleRadius;
+				Overlaps = overlaps;
+			}
+		}
+
 		public struct CircleIntersectLineTestCase
 		{
 			public WDist CircleRadius;
@@ -280,6 +301,39 @@ namespace OpenRA.Test
 			}
 		}
 
+		[TestCase(TestName = "Circle path overlaps with another Circle")]
+		public void CirclePathOverlapsWithCircle()
+		{
+			var circleTestCases = new List<CirclePathOverlapsWithCircleTestCase>()
+			{
+				new(new WPos(0, 0, 0), new WPos(8486, -2353, 0), new WDist(1234), new WPos(3488, -2930, 0), new WDist(1234), true),
+				new(new WPos(13, -10547, 0), new WPos(-12, 1, 0), new WDist(1234), new WPos(2637, -4294, 0), new WDist(1234), false),
+				new(new WPos(13, -10547, 0), new WPos(-12, 1, 0), new WDist(1234), new WPos(2446, -4294, 0), new WDist(1234), true),
+				new(new WPos(-12, 1, 0), new WPos(13, -10547, 0), new WDist(1234), new WPos(2446, -4294, 0), new WDist(1234), true),
+				new(new WPos(-12, 1, 0), new WPos(13, -10547, 0), new WDist(1234), new WPos(2446, -4294, 0), new WDist(1000), false),
+				new(new WPos(-12, 1, 0), new WPos(13, -10547, 0), new WDist(800), new WPos(2446, -4294, 0), new WDist(1600), false),
+				new(new WPos(-12, 1, 0), new WPos(13, -10547, 0), new WDist(8000), new WPos(2446, -4294, 0), new WDist(1600), true),
+			};
+
+			bool PathCollision(CirclePathOverlapsWithCircleTestCase ctc)
+			{
+				shape = new CircleShape(ctc.SelfCircleRadius);
+				shape.Initialize();
+				Console.WriteLine($"SourceCenter: {ctc.SourceCenter}, DestCenter: {ctc.DestCenter}, SelfCircleRadius: {ctc.SelfCircleRadius}," +
+								  $"OtherCircleCenter: {ctc.OtherCircleCenter}, OtherCircleRadius: {ctc.OtherCircleRadius}");
+				return CircleShape.CheckOverlap(ctc.SourceCenter, ctc.DestCenter, ctc.SelfCircleRadius, ctc.OtherCircleCenter, ctc.OtherCircleRadius);
+			}
+
+			var pathCollisions = new List<bool>();
+			foreach (var (ctc, index) in circleTestCases.Select((item, index) => (item, index)))
+			{
+				var collision = PathCollision(ctc);
+				pathCollisions.Add(collision);
+				Console.WriteLine($"Circle Path {index + 1} has overlap: {ctc.Overlaps}, expected: {ctc.Overlaps} ");
+				Assert.That(collision == ctc.Overlaps);
+			}
+		}
+
 		[TestCase(TestName = "CircleShape Line Intersection works")]
 		public void CircleIntersectsLine()
 		{
@@ -305,7 +359,10 @@ namespace OpenRA.Test
 			{
 				shape = new CircleShape(ctc.CircleRadius);
 				shape.Initialize();
-				return shape.LineIntersectsOrIsInside(ctc.CircleCenter, ctc.P1, ctc.P2);
+				Console.WriteLine($"p1: {ctc.P1}, p2: {ctc.P2}, p3: {new WDist(1)}, p4: {ctc.CircleCenter}, p5: {ctc.CircleRadius}");
+				return //shape.LineIntersectsOrIsInside(ctc.CircleCenter, ctc.P1, ctc.P2) &&
+					//CircleShape.DoesCircleAlongLineCollideWithCircle(ctc.P1, ctc.P2, ctc.CircleRadius, ctc.CircleCenter, ctc.CircleRadius);
+					CircleShape.CheckOverlap(ctc.P1, ctc.P2, new WDist(1), ctc.CircleCenter, ctc.CircleRadius);
 			}
 
 			var lineCollisions = new List<bool>();
@@ -313,8 +370,8 @@ namespace OpenRA.Test
 			{
 				var collision = LineCollision(ctc);
 				lineCollisions.Add(collision);
+				Console.WriteLine($"line {index + 1} has collision: {collision}, expected: {ctc.HasIntersection} ");
 				Assert.That(collision == ctc.HasIntersection); // if != null is true, a point exists
-				Console.WriteLine($"line {index + 1} has collision: {collision} ");
 			}
 		}
 
