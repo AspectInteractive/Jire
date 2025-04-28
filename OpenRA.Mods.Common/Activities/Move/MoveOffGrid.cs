@@ -651,7 +651,7 @@ namespace OpenRA.Mods.Common.Activities
 				maybeCollidingMobileOGs.AddRange(self.World.ActorMap.GetActorsAt(cell)
 					.Where(a => a.IsInWorld && mobileOffGrid.ActorIsAiming(a))
 					.Select(a => a.TraitsImplementing<MobileOffGrid>().FirstOrDefault(Exts.IsTraitEnabled))
-					.Where(m => m != null)
+					.Where(m => m != null && !m.IsMoving)
 					.OrderBy(m => (m.CenterPosition - mobileOffGrid.CenterPosition).HorizontalLengthSquared));
 			}
 

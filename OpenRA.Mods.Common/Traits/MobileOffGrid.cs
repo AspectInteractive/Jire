@@ -26,6 +26,8 @@ using OpenRA.Traits;
 using TagLib.Riff;
 using OpenRA.Mods.Common.HitShapes;
 using static OpenRA.Mods.Common.Traits.MobileOffGrid;
+using System.Reflection;
+
 
 #pragma warning disable SA1513 // Closing brace should be followed by blank line
 
@@ -621,12 +623,14 @@ namespace OpenRA.Mods.Common.Traits
 			return false;
 		}
 
+		public bool IsMovable() => !IsTraitDisabled && !IsTraitPaused && !IsImmovable;
+		public bool IsMoving => IsMovable() && CurrentMovementTypes.HasMovementType(MovementType.Horizontal);
+
 		public void CreateRepelNearbyUnitsVectorsTick(Actor self)
 		{
 			var nearbyActorRange = UnitRadius * 2;
 			var nearbyActors = self.World.FindActorsInCircle(CenterPosition, nearbyActorRange);
-
-			if (!ActorIsAiming(self)) // Attacking actors are not repelled
+			if (IsMoving)
 			{
 				foreach (var nearbyActor in nearbyActors)
 				{
