@@ -720,9 +720,24 @@ namespace OpenRA.Mods.Common.Activities
 
 					foreach (var intersect in intersections)
 					{
-						var thisIntersectSide = PosIsToTheLeft(mobileOffGrid.CenterPosition, currPathTarget, intersect) ? "left" : "right";
+						string intersectSide;
+						if (ActorsSharingMove.Count > 1 && chosenIntersectSide == "" && !usingLocalAvoidance) // we check for usingLocalAvoidance as we only want to do this at the beginning
+						{
+							// If this is a group order, we take the center position of the group and draw a line from it to the destination.
+							// We pick the intersect based on which side of this line the unit is on, so we set chosenIntersectSide early
+							var avgSourcePosOfGroup = IEnumerableExtensions.Average(ActorsSharingMove.Select(a => a.Trait.CenterPosition));
+							chosenIntersectSide = PosIsToTheLeft(avgSourcePosOfGroup, currPathTarget, mobileOffGrid.CenterPosition) ? "left" : "right";
 
-						if (chosenIntersectSide != "" && thisIntersectSide != chosenIntersectSide)
+							mobileOffGrid.Overlay.AddText(mobileOffGrid.CenterPosition, chosenIntersectSide[..1].ToUpperInvariant(), Color.Yellow,
+								3, OverlayKeyStrings.LocalAvoidance);
+						}
+
+						// Intersect side must always be to the left or right of the unit, otherwise it is not useful
+						intersectSide = PosIsToTheLeft(mobileOffGrid.CenterPosition, currPathTarget, intersect) ? "left" : "right";
+						RenderTextCollDebug(self, mobileOffGrid.CenterPosition, intersectSide[..1].ToUpperInvariant(), Color.Yellow);
+
+						// Either we are already moving to one side, or we have pre-chosen the side based on it being a group move order
+						if (chosenIntersectSide != "" && intersectSide != chosenIntersectSide)
 							continue; // if we have already picked an intersectSide, we continue with that intersectSide for this movement to avoid ping-ponging
 
 						var maybeCollidingMobileOGs2 = GetMaybeCollidingMOGsUnderneathUnitPath(self, mobileOffGrid.CenterPosition, intersect, mobileOffGrid.UnitRadius);
@@ -733,7 +748,8 @@ namespace OpenRA.Mods.Common.Activities
 
 						if (!newCollidingMobileOGs.Any() && !pathFound)
 						{
-							chosenIntersectSide = PosIsToTheLeft(mobileOffGrid.CenterPosition, currPathTarget, intersect) ? "left" : "right";
+							if (chosenIntersectSide == "")
+								chosenIntersectSide = PosIsToTheLeft(mobileOffGrid.CenterPosition, currPathTarget, intersect) ? "left" : "right";
 							InsertNewTarget(intersect);
 							RenderPointCollDebug(self, intersect, Color.RandomColor());
 

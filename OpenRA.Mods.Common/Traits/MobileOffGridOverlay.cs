@@ -142,8 +142,8 @@ namespace OpenRA.Mods.Common.Traits
 			public const string FleeVectors = "flee"; // toggles seek vector overlays.
 			public const string AllVectors = "allvec"; // toggles combined seek + flee vector overlays.
 			public const string Collision = "coll"; // toggles visual of collisions
-			public const string PathingText = "pathingtext"; // toggles seek, flee, and combined vector overlays.
-			public const string Pathing = "pathing"; // toggles current path
+			public const string PathingText = "pathtext"; // toggles seek, flee, and combined vector overlays.
+			public const string Pathing = "path"; // toggles current path
 			public const string PFNumber = "pfnum"; // toggles the index of the Theta PF used
 		}
 
