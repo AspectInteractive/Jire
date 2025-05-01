@@ -818,6 +818,9 @@ namespace OpenRA.Mods.Common.Traits
 					.Zip(unitHitShape.GetCorners((selfCenter + move).XYToInt2())).ToList();
 		}
 
+		//public static bool CellIsBlocked(Actor self, Locomotor locomotor, CPos cell, BlockedByActor check = BlockedByActor.Immovable)
+		//	=> locomotor.CanMoveFreelyInto(self, cell, SubCell.FullCell, BlockedByActor.Immovable, self, false);
+
 		public static bool CellIsBlocked(Actor self, Locomotor locomotor, CPos cell, BlockedByActor check = BlockedByActor.Immovable)
 		{
 			return locomotor.MovementCostToEnterCell(self, cell, check, self, true) == short.MaxValue ||

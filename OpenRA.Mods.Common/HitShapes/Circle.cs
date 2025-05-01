@@ -196,15 +196,31 @@ namespace OpenRA.Mods.Common.HitShapes
 			var dy = y2 - y1;
 
 			var lengthSquared = dx * dx + dy * dy;
-			var dotProduct = (xc - x1) * dx + (yc - y1) * dy;
-			dotProduct = Math.Max(0, Math.Min(lengthSquared, dotProduct));
 
-			var t = (dotProduct << FractionalBits) / lengthSquared;
-			var closestX = x1 + ((dx * t) >> FractionalBits);
-			var closestY = y1 + ((dy * t) >> FractionalBits);
+			long closestX;
+			long closestY;
+
+			if (lengthSquared == 0)
+			{
+				// lineStart and lineEnd are the same point, so the closest point is lineStart
+				closestX = x1;
+				closestY = y1;
+			}
+			else
+			{
+				var dotProduct = (xc - x1) * dx + (yc - y1) * dy;
+				dotProduct = Math.Max(0, Math.Min(lengthSquared, dotProduct));
+
+				var t = (dotProduct << FractionalBits) / lengthSquared;
+				closestX = x1 + ((dx * t) >> FractionalBits);
+				closestY = y1 + ((dy * t) >> FractionalBits);
+
+				Console.WriteLine($"Closest point: ({closestX}, {closestY})");
+
+				return Fix64.Sqrt((Fix64)((xc - closestX) * (xc - closestX) + (yc - closestY) * (yc - closestY)));
+			}
 
 			Console.WriteLine($"Closest point: ({closestX}, {closestY})");
-
 			return Fix64.Sqrt((Fix64)((xc - closestX) * (xc - closestX) + (yc - closestY) * (yc - closestY)));
 		}
 

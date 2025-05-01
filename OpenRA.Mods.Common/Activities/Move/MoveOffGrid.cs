@@ -469,6 +469,7 @@ namespace OpenRA.Mods.Common.Activities
 			else
 				return NonFormationMove();
 		}
+
 		public override bool Tick(Actor self)
 		{
 			// NOTE: Do not check if the pathfinder is running, as it will automatically turn off after the path is found
@@ -538,6 +539,7 @@ namespace OpenRA.Mods.Common.Activities
 				}
 			}
 
+			//if (tickCount == 0) // We cannot run this every tick as it is too performance intensive
 			UpdateSeekVecWithLocalAvoidance(self);
 
 			if (mobileOffGrid.PositionBuffer.Count >= 3)
@@ -637,22 +639,23 @@ namespace OpenRA.Mods.Common.Activities
 		}
 
 		// Includes the unit's radius, and returns list sorted by closest MOG first
-		public List<MobileOffGrid> GetMaybeCollidingMOGsUnderneathUnitPath(Actor self, WPos sourcePos, WPos destPos, WDist unitRadius)
+		public IEnumerable<MobileOffGrid> GetMaybeCollidingMOGsUnderneathUnitPath(Actor self, WPos sourcePos, WPos destPos, WDist unitRadius)
 		{
 			// We get the unit radius * 2 (diameter) as a ratio to the cell's length, so that we can add this amount of cell neighbours to the line.
 			var unitRadiusToCellAmount = Fix64.Ceiling((Fix64)unitRadius.Length * (Fix64)2 / (Fix64)1024);
-			var cellsToCheck = GetAllCellsUnderneathALine(self.World, mobileOffGrid.CenterPosition, currPathTarget, (int)unitRadiusToCellAmount);
+			var cellsToCheck = GetAllCellsUnderneathALine(self.World, sourcePos, destPos, (int)unitRadiusToCellAmount);
+			//var actorsToCheck = self.World.FindActorsInCircle(sourcePos, new WDist((destPos - sourcePos).Length + unitRadius.Length * 2));
 
-			var maybeCollidingMobileOGs = new List<MobileOffGrid>();
+			IEnumerable<MobileOffGrid> maybeCollidingMobileOGs = Array.Empty<MobileOffGrid>();
 
 			foreach (var cell in cellsToCheck)
 			{
 				//RenderCircleColorCollDebug(self, new WPos(cell.X * 1024 + 512, cell.Y * 1024 + 512, 0), new WDist(512), Color.Purple, 3);
-				maybeCollidingMobileOGs.AddRange(self.World.ActorMap.GetActorsAt(cell)
+				maybeCollidingMobileOGs = maybeCollidingMobileOGs.Concat(self.World.ActorMap.GetActorsAt(cell)
 					.Where(a => a.IsInWorld && mobileOffGrid.ActorIsAiming(a))
 					.Select(a => a.TraitsImplementing<MobileOffGrid>().FirstOrDefault(Exts.IsTraitEnabled))
 					.Where(m => m != null && !m.IsMoving)
-					.OrderBy(m => (m.CenterPosition - mobileOffGrid.CenterPosition).HorizontalLengthSquared));
+					.OrderBy(m => (destPos - sourcePos).HorizontalLengthSquared));
 			}
 
 			return maybeCollidingMobileOGs;
@@ -666,7 +669,7 @@ namespace OpenRA.Mods.Common.Activities
 
 			// If our currPathTarget is an avoidance target and there is at least one next target (the original destination), we look ahead by
 			// one to see if we can skip the currPathTarget
-			if (usingLocalAvoidance && pathRemaining.Count >= 1)
+			if (usingLocalAvoidance && pathRemaining.Count >= 1 && tickCount == 0)
 			{
 				var maybeCollidingMobileOGsSkip = GetMaybeCollidingMOGsUnderneathUnitPath(self, mobileOffGrid.CenterPosition, currPathTarget, mobileOffGrid.UnitRadius);
 				var collidingMobileOGsSkip = new List<MobileOffGrid>();
@@ -683,6 +686,8 @@ namespace OpenRA.Mods.Common.Activities
 					GetNextTargetOrComplete(self);
 					return;
 				}
+				else
+					return; // We still return if we have colliding units ahead of us, since that means we already have a target to reach
 			}
 
 			var maybeCollidingMobileOGs = GetMaybeCollidingMOGsUnderneathUnitPath(self, mobileOffGrid.CenterPosition, currPathTarget, mobileOffGrid.UnitRadius);
@@ -751,12 +756,12 @@ namespace OpenRA.Mods.Common.Activities
 							if (chosenIntersectSide == "")
 								chosenIntersectSide = PosIsToTheLeft(mobileOffGrid.CenterPosition, currPathTarget, intersect) ? "left" : "right";
 							InsertNewTarget(intersect);
-							RenderPointCollDebug(self, intersect, Color.RandomColor());
+							//RenderPointCollDebug(self, intersect, Color.RandomColor());
 
-							var overlay = self.World.WorldActor.TraitsImplementing<ThetaStarPathfinderOverlay>().FirstEnabledTraitOrDefault();
-							var renderPath = new List<WPos>() { lastPathTarget, currPathTarget };
-							if (overlay.Enabled)
-								overlay.AddPath(renderPath);
+							//var overlay = self.World.WorldActor.TraitsImplementing<ThetaStarPathfinderOverlay>().FirstEnabledTraitOrDefault();
+							//var renderPath = new List<WPos>() { lastPathTarget, currPathTarget };
+							//if (overlay.Enabled)
+							//	overlay.AddPath(renderPath);
 
 							pathFound = true;
 							usingLocalAvoidance = true;
