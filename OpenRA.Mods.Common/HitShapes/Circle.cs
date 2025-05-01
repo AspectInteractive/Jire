@@ -215,19 +215,15 @@ namespace OpenRA.Mods.Common.HitShapes
 				closestX = x1 + ((dx * t) >> FractionalBits);
 				closestY = y1 + ((dy * t) >> FractionalBits);
 
-				Console.WriteLine($"Closest point: ({closestX}, {closestY})");
-
 				return Fix64.Sqrt((Fix64)((xc - closestX) * (xc - closestX) + (yc - closestY) * (yc - closestY)));
 			}
 
-			Console.WriteLine($"Closest point: ({closestX}, {closestY})");
 			return Fix64.Sqrt((Fix64)((xc - closestX) * (xc - closestX) + (yc - closestY) * (yc - closestY)));
 		}
 
 		public static bool CheckOverlap(WPos lineStart, WPos lineEnd, WDist selfRadius, WPos otherCenter, WDist otherRadius)
 		{
 			var distance = ClosestDistance(lineStart, lineEnd, otherCenter);
-			Console.WriteLine($"rA + rB: {selfRadius.Length + otherRadius.Length}");
 			return distance <= (Fix64)selfRadius.Length + (Fix64)otherRadius.Length;
 		}
 

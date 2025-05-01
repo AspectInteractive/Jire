@@ -186,6 +186,7 @@ namespace OpenRA.Mods.Common.Activities
 
 		public void ResetVariables()
 		{
+			pathRemaining.Clear();
 			currPathTarget = WPos.Zero;
 			mobileOffGrid.CurrPathTarget = WPos.Zero;
 			lastPathTarget = WPos.Zero;
@@ -699,7 +700,7 @@ namespace OpenRA.Mods.Common.Activities
 					collidingMobileOGs.Add(mc);
 
 			// Note that we only continue if an actual colliding mobile OG exists
-			const int MaxIters = 30;
+			const int MaxIters = 10;
 			if (collidingMobileOGs.Count > 0)
 			{
 				var i = 0;
@@ -739,7 +740,7 @@ namespace OpenRA.Mods.Common.Activities
 
 						// Intersect side must always be to the left or right of the unit, otherwise it is not useful
 						intersectSide = PosIsToTheLeft(mobileOffGrid.CenterPosition, currPathTarget, intersect) ? "left" : "right";
-						RenderTextCollDebug(self, mobileOffGrid.CenterPosition, intersectSide[..1].ToUpperInvariant(), Color.Yellow);
+						//RenderTextCollDebug(self, mobileOffGrid.CenterPosition, intersectSide[..1].ToUpperInvariant(), Color.Yellow);
 
 						// Either we are already moving to one side, or we have pre-chosen the side based on it being a group move order
 						if (chosenIntersectSide != "" && intersectSide != chosenIntersectSide)
@@ -767,11 +768,15 @@ namespace OpenRA.Mods.Common.Activities
 							usingLocalAvoidance = true;
 							return;
 						}
-						else // otherwise we add all colliding unit MobileOGs to the list of colliding mobile OGs, where subsequent intersects will be checked again.
-							collidingMobileOGs.AddRange(newCollidingMobileOGs.Where(mog => !collidingMobileOGs.Contains(mog)));
+						else // otherwise we add all colliding unit MobileOGs to the list of colliding mobile OGs, where subsequent intersects will be checked again.\
+						{
+							var newUniqueCollidingMobileOgs = newCollidingMobileOGs.Where(mog => !collidingMobileOGs.Contains(mog));
+							collidingMobileOGs.AddRange(newUniqueCollidingMobileOgs);
+						}
 					}
 
 					i++;
+					//Console.WriteLine($"i: {i} of MaxIters: {MaxIters}");
 				}
 				while (!pathFound && collidingMobileOGs.Count > 0 && i < MaxIters);
 			}

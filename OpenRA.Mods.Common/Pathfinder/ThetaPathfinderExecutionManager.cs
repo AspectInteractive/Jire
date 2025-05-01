@@ -89,7 +89,7 @@ namespace OpenRA.Mods.Common.Traits
 		Locomotor locomotor;
 		readonly int maxCurrExpansions = 500;
 		readonly int radiusForSharedThetas = 1024 * 10;
-		readonly int minDistanceForCircles = 0; // used to be 1024 * 28
+		readonly int minDistanceForCircles = 1024 * 28; // used to be 1024 * 28
 		readonly int sliceAngle = 10;
 		readonly int maxCircleSlices = 36;
 		readonly Dictionary<PlayerCircleGroupIndex, List<ThetaCircle>> playerCircleGroups = new();
@@ -158,7 +158,8 @@ namespace OpenRA.Mods.Common.Traits
 			overlay.ClearPaths();
 
 			// Bypass circle logic if distance to target is small enough
-			if (!GreaterThanMinDistanceForCircles(actor, targetPos) || sharedMoveActors == null)
+			if (ThetaStarPathSearch.IsPathObservable(world, actor, locomotor, actor.CenterPosition, targetPos, actor.Trait<MobileOffGrid>().UnitHitShape, true, 0)
+				|| !GreaterThanMinDistanceForCircles(actor, targetPos) || sharedMoveActors == null)
 			{
 				var rawThetaStarSearch = new ThetaStarPathSearch(actor.World, actor, actor.CenterPosition,
 																 targetPos)

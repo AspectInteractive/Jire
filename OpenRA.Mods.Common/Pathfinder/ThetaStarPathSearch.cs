@@ -672,7 +672,7 @@ namespace OpenRA.Mods.Common.Pathfinder
 		}
 
 #pragma warning disable SA1312 // Variable names should begin with lower-case letter
-		private bool LineOfSight(CCPos cc1, CCPos cc2)
+		bool LineOfSight(CCPos cc1, CCPos cc2)
 		{
 			var x1 = cc1.X;
 			var y1 = cc1.Y;
