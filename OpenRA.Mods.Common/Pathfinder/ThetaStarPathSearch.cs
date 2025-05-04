@@ -24,6 +24,7 @@ using OpenRA.Mods.Common.HitShapes;
 using OpenRA.Mods.Common.Traits;
 using OpenRA.Primitives;
 using OpenRA.Traits;
+using static OpenRA.Mods.Common.Traits.MobileOffGrid;
 
 #pragma warning disable SA1512 // SingleLineCommentsMustNotBeFollowedByBlankLine
 #pragma warning disable SA1108 // BlockStatementsMustNotContainEmbeddedComments
@@ -481,7 +482,9 @@ namespace OpenRA.Mods.Common.Pathfinder
 
 			// We first check if we can move to the target directly. If so, skip all pathfinding and return the list (sourcePos, destPos)
 			// We do not need to check if the dest is reachable since there are no obstacles to it
-			if (!skipInitialLOSCheck && CcinMap(GetNearestCCPos(destPos)) && IsPathObservable(sourcePos, destPos, mobileOffGrid.UnitHitShape, true, 0))
+			if (!skipInitialLOSCheck && CcinMap(GetNearestCCPos(destPos)) &&
+				(IsPathObservable(sourcePos, destPos, mobileOffGrid.UnitHitShape, true, 0) ||
+				(self.CurrentActivity is ReturnToCellActivity))) // Path does not need to be observable if the unit is returning to a cell
 			{
 				path.Add(new PathPos(sourcePos));
 				path.Add(new PathPos(destPos));

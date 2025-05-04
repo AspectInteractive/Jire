@@ -630,7 +630,8 @@ namespace OpenRA.Mods.Common.Traits
 		{
 			var nearbyActorRange = UnitRadius * 2;
 			var nearbyActors = self.World.FindActorsInCircle(CenterPosition, nearbyActorRange);
-			if (IsMoving)
+
+			if (IsMoving || !ActorIsAiming(self)) // We only repel other units if we are either movingo or not attacking
 			{
 				foreach (var nearbyActor in nearbyActors)
 				{
@@ -727,8 +728,6 @@ namespace OpenRA.Mods.Common.Traits
 
 		public void MobileOffGridMoveTick(Actor self)
 		{
-			CreateRepelNearbyUnitsVectorsTick(self);
-
 			var move = ForcedMove == WVec.Zero ? GenFinalWVec() : ForcedMove;
 
 			if (!SearchingForNextTarget && CurrPathTarget != WPos.Zero)
@@ -740,7 +739,6 @@ namespace OpenRA.Mods.Common.Traits
 			RenderPathingStats();
 			//RenderCurrPathTarget();
 
-			//UpdateSeekVecWithLocalAvoidance();
 			AddCellCollisionFleeVectors();
 
 			// Remove vectors if unit is blocked
@@ -1087,6 +1085,9 @@ namespace OpenRA.Mods.Common.Traits
 					Pitch = Util.TickFacing(Pitch, WAngle.Zero, Info.PitchSpeed);
 			}
 
+			CreateRepelNearbyUnitsVectorsTick(self);
+
+			// NOTE: Even if the unit is not moving this has to occur, as this ensures units will be repelled even if stationary
 			MobileOffGridMoveTick(self); // Update unit position
 
 			// Update unit's cell as it moves

@@ -1,4 +1,4 @@
-#region Copyright & License Information
+﻿#region Copyright & License Information
 /*
  * Copyright 2007-2021 The OpenRA Developers (see AUTHORS)
  * This file is part of OpenRA, which is free software. It is made
@@ -130,11 +130,18 @@ namespace OpenRA.Mods.Common.Activities
 
 		public WDist MaxRangeToTarget()
 		{
+			var maxRange = WDist.Zero;
 			var actorMobileOgs = ActorsSharingMove.Where(a => !a.Actor.IsDead).Select(a => a.Trait).ToList();
 
-			return actorMobileOgs.Count > 0 ? new WDist(actorMobileOgs.Select(m => m.UnitRadius.Length).Sum()
-														/ Math.Max(ActorsSharingMove.Count, 1)
-														* Exts.ISqrt(ActorsSharingMove.Count, Exts.ISqrtRoundMode.Ceiling)) : WDist.Zero;
+			if (actorMobileOgs.Count > 0)
+			{
+				var avgUnitRadius = actorMobileOgs.Average(a => a.UnitRadius.Length);
+				// Formula for radius of the smallest circle of N units clustered together having fixed UnitRadius R: (R * (1 + 1 / sin(π / N))
+				var smallestCircleRadiusWithUnits = (Fix64)avgUnitRadius * ((Fix64)1 + (Fix64)1 / Fix64.Sin(Fix64.Pi / (Fix64)actorMobileOgs.Count));
+				maxRange = new WDist((int)smallestCircleRadiusWithUnits);
+			}
+
+			return maxRange;
 		}
 
 		void InsertNewTarget(WPos target)
@@ -497,8 +504,11 @@ namespace OpenRA.Mods.Common.Activities
 			}
 
 			// Will not move unless there is a path to move on
-			if (pathRemaining.Count == 0 && currPathTarget == WPos.Zero)
-				return false;
+			if (mobileOffGrid.CurrThetaSearch == null && pathRemaining.Count == 0 && currPathTarget == WPos.Zero)
+			{
+				EndingActions();
+				return Complete();
+			}
 
 			var nearbyActorsSharingMove = GetNearbyActorsSharingMove(self, false);
 			var dat = self.World.Map.DistanceAboveTerrain(mobileOffGrid.CenterPosition);
@@ -541,7 +551,8 @@ namespace OpenRA.Mods.Common.Activities
 			}
 
 			//if (tickCount == 0) // We cannot run this every tick as it is too performance intensive
-			UpdateSeekVecWithLocalAvoidance(self);
+			if (self.CurrentActivity is not ReturnToCellActivity)
+				UpdateSeekVecWithLocalAvoidance(self);
 
 			if (mobileOffGrid.PositionBuffer.Count >= 3)
 			{
@@ -589,11 +600,13 @@ namespace OpenRA.Mods.Common.Activities
 				{
 					mobileOffGrid.CurrMovementState = MovementState.FailedStuck;
 					EndingActions();
+					if (mobileOffGrid.PositionBuffer.Count >= 20 && self.CurrentActivity is not ReturnToCellActivity)
+						Complete();
 					mobileOffGrid.PositionBuffer.Clear();
 				}
 				// lengthMoved >= mobileOffGrid.MovementSpeed
-				else
-					mobileOffGrid.PositionBuffer.Clear();
+				//else
+				//	mobileOffGrid.PositionBuffer.Clear();
 			}
 
 			var selfHasReachedGoal = Delta.HorizontalLengthSquared < mobileOffGrid.UnitRadius.LengthSquared;

@@ -181,9 +181,6 @@ namespace OpenRA.Mods.Common.HitShapes
 			return (int)closestDistance <= selfRadius.Length + otherRadius.Length;
 		}
 
-		public static Fix64 Fix64Min(Fix64 val1, Fix64 val2) => val1 < val2 ? val1 : val2;
-		public static Fix64 Fix64Max(Fix64 val1, Fix64 val2) => val1 > val2 ? val1 : val2;
-
 		public static Fix64 ClosestDistance(WPos lineStart, WPos lineEnd, WPos otherCenter)
 		{
 			const int FractionalBits = 16;
