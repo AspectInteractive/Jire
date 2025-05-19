@@ -24,6 +24,7 @@ using OpenRA.Mods.Common.HitShapes;
 using OpenRA.Mods.Common.Traits;
 using OpenRA.Primitives;
 using OpenRA.Traits;
+using TagLib.Id3v2;
 using static OpenRA.Mods.Common.Traits.MobileOffGrid;
 
 #pragma warning disable SA1512 // SingleLineCommentsMustNotBeFollowedByBlankLine
@@ -38,6 +39,7 @@ namespace OpenRA.Mods.Common.Pathfinder
 	public class ThetaStarPathSearch
 	{
 		static readonly List<PathPos> EmptyPath = new List<PathPos>(0);
+		ThetaStarPathfinderOverlay overlay;
 
 		public void RenderPathIfOverlay(List<WPos> path)
 		{
@@ -74,6 +76,7 @@ namespace OpenRA.Mods.Common.Pathfinder
 		public bool AtStart = true;
 		public WPos Source;
 		public WPos Dest;
+		public CCPos destCCPos;
 		public CCState minState;
 		public CCState startState;
 		public CCState goalState;
@@ -88,9 +91,19 @@ namespace OpenRA.Mods.Common.Pathfinder
 		public int maxTotalExpansions = 2000;
 		public bool HitTotalExpansionLimit => numTotalExpansions >= maxTotalExpansions;
 
+		public class CCStateFvalComparer : IComparer<CCState>
+		{
+			public int Compare(CCState x, CCState y)
+			{
+				return x.CompareTo(y);
+			}
+		}
+
 		public class CCState : IComparable<CCState>, IEquatable<CCState>
 		{
 			public CCPos CC;
+			public bool InOpen = false;
+			public bool InClosed = false;
 			public int Hval;
 			public World thisWorld;
 			public int Gval = int.MaxValue;
@@ -137,15 +150,13 @@ namespace OpenRA.Mods.Common.Pathfinder
 				Gval = gVal;
 			}
 
-			public void RenderInIfOverlay(World world)
+			public void RenderInIfOverlay(World world, ThetaStarPathfinderOverlay overlay)
 			{
-				var overlay = world.WorldActor.TraitsImplementing<ThetaStarPathfinderOverlay>().FirstEnabledTraitOrDefault();
 				if (overlay.Enabled)
 					overlay.AddState(this);
 			}
-			public void RenderInIfOverlayWithCheck(World world)
+			public void RenderInIfOverlayWithCheck(World world, ThetaStarPathfinderOverlay overlay)
 			{
-				var overlay = world.WorldActor.TraitsImplementing<ThetaStarPathfinderOverlay>().FirstEnabledTraitOrDefault();
 				if (overlay.Enabled)
 				{
 					overlay.RemoveState(this);
@@ -171,11 +182,11 @@ namespace OpenRA.Mods.Common.Pathfinder
 
 			public override bool Equals(object obj)
 			{
-				if (ReferenceEquals(this, obj))
+				if (ReferenceEquals(this, obj) || CC == ((CCState)obj).CC)
 					return true;
-				if (ReferenceEquals(obj, null))
-					return false;
-				throw new NotImplementedException();
+				if (obj is null && this is null)
+					return true;
+				return false;
 			}
 
 			public override int GetHashCode()
@@ -205,8 +216,77 @@ namespace OpenRA.Mods.Common.Pathfinder
 				ccStateList.Add(new CCState(cc, goalPos, thisWorld));
 		}
 
-		private LinkedList<CCState> OpenList { get; set; }
-		private LinkedList<CCState> ClosedList { get; set; }
+		public sealed class CustomLinkedList<T>
+		{
+			public Node Head = null;
+
+			public class Node
+			{
+				public Node Next = null;
+				public T Value;
+
+				public Node(T value) => Value = value;
+
+				public Node(Node next, T value)
+				{
+					Next = next;
+					Value = value;
+				}
+			}
+
+			public CustomLinkedList() { }
+			public CustomLinkedList(Node head) => Head = head;
+			public Node First => Head;
+
+			public bool Contains<U>(T value, Func<T, U> functor = null)
+			{
+				var currItem = Head;
+				while (currItem != null)
+				{
+					if ((functor != null && functor(currItem.Value).Equals(functor(value))) ||
+						currItem.Value.Equals(value))
+						return true;
+					currItem = currItem.Next;
+				}
+
+				return false;
+			}
+
+			public void RemoveAfter(Node afterNode)
+			{
+				afterNode.Next = afterNode.Next.Next;
+			}
+
+			public void AddAfter(Node afterNode, T valueToAdd)
+			{
+				var nodeToAdd = new Node(afterNode.Next, valueToAdd);
+				afterNode.Next = nodeToAdd;
+			}
+
+			public void AddFirst(T valueToAdd)
+			{
+				var nodeToAdd = new Node(Head, valueToAdd);
+				Head = nodeToAdd;
+			}
+			public void ReplaceFirst(T valueToAdd)
+			{
+				if (Head != null)
+					Head = new Node(Head.Next, valueToAdd);
+				else
+					Head = new Node(valueToAdd);
+			}
+
+			public void RemoveFirst()
+			{
+				if (Head != null)
+					Head = Head.Next;
+			}
+
+			public bool IsEmpty() => Head == null;
+		}
+
+		private CustomLinkedList<CCState> OpenList { get; set; }
+		private CustomLinkedList<CCState> ClosedList { get; set; }
 		private Dictionary<(int x, int y), CCState> ccStateList = new Dictionary<(int x, int y), CCState>();
 		public enum StateListType : byte { OpenList, ClosedList, NoList }
 
@@ -235,6 +315,7 @@ namespace OpenRA.Mods.Common.Pathfinder
 		private readonly int cPosMaxSizeY;
 		private readonly int cPosMinSizeX;
 		private readonly int cPosMinSizeY;
+
 		private enum CellSurroundingCorner : byte { TopLeft, TopRight, BottomLeft, BottomRight }
 
 		private void EndingActions(bool pathWasFound)
@@ -243,73 +324,136 @@ namespace OpenRA.Mods.Common.Pathfinder
 			running = false;
 		}
 
+
 		private void AddStateToOpen(CCState state)
 		{
-			RemoveStateFromOpen(state);
-			RemoveStateFromClosed(state);
+			if (state.InClosed)
+			{
+				RemoveStateFromClosed(state);
+				state.InClosed = false;
+			}
+			state.InOpen = true;
 			UpdateState(state);
 
-			// Remove any matching state that is already in the list
+			// Find the first item that is larger and add the item directly before it
 			var currItem = OpenList.First;
-			while (currItem != null)
+
+			if (currItem != null) // At least one item in the list
 			{
 				if (currItem.Value == state)
-					OpenList.Remove(currItem); // Remove with existing properties (== checks for ID match _not_ values)
-				currItem = currItem.Next;
+					OpenList.RemoveFirst();
+				if (state.Fval <= currItem.Value.Fval) // INVARIANT: If state not added here, then it must be larger than the first item
+				{
+					OpenList.AddFirst(state);
+					return; // We exit early to ensure state is not added more than once (shouldn't happen anyway but just in case)
+				}
+			}
+			else // This means the list is empty
+			{
+				OpenList.AddFirst(state);
+				return;
 			}
 
-			// Find the first item that is larger and add the item directly before it
-			currItem = OpenList.First;
-			while (currItem != null)
+			while (currItem != null && currItem.Next != null) // Will not enter the loop if the list only has 1 item
 			{
-				if (state.Fval > currItem.Value.Fval) // By not using <= we ensure this is a stable sort
+				if (currItem.Next.Value == state)
+					OpenList.RemoveAfter(currItem); // Remove with existing properties (== checks for ID match _not_ values)
+				if (currItem.Next != null && state.Fval > currItem.Next.Value.Fval) // By not using <= we ensure this is a stable sort
 					currItem = currItem.Next;
 				else
-					break;
+				{
+					OpenList.AddAfter(currItem, state);
+					return;
+				}
 			}
 
-			if (currItem != null)
-				OpenList.AddBefore(currItem, state);
-			else if (currItem == null && OpenList.Count > 0)
-				OpenList.AddLast(state);
-			else
-				OpenList.AddFirst(state);
+			// The below will only execute when currItem.Next == null, since that is the only exit condition for the above while loop
+			OpenList.AddAfter(currItem, state);
 		}
 
 		private void AddStateToClosed(CCState state)
 		{
-			RemoveStateFromOpen(state);
-			RemoveStateFromClosed(state);
+			if (state.InOpen)
+			{
+				RemoveStateFromOpen(state);
+				state.InOpen = false;
+			}
+			state.InClosed = true;
 			UpdateState(state);
 
-			// Remove any matching state that is already in the list
+			// Find the first item that is larger and add the item directly before it
 			var currItem = ClosedList.First;
-			while (currItem != null)
+
+			if (currItem != null) // At least one item in the list
 			{
 				if (currItem.Value == state)
-					ClosedList.Remove(currItem); // Remove with existing properties (== checks for ID match _not_ values)
-				currItem = currItem.Next;
+					ClosedList.RemoveFirst();
+				if (state.Fval <= currItem.Value.Fval) // INVARIANT: If state not added here, then it must be larger than the first item
+				{
+					ClosedList.AddFirst(state);
+					return; // We exit early to ensure state is not added more than once (shouldn't happen anyway but just in case)
+				}
+			}
+			else // This means the list is empty
+			{
+				ClosedList.AddFirst(state);
+				return;
 			}
 
-			// Find the first item that is larger and add the item directly before it
-			currItem = ClosedList.First;
-			while (currItem != null)
+			while (currItem != null && currItem.Next != null) // Will not enter the loop if the list only has 1 item
 			{
-				if (state.Fval > currItem.Value.Fval) // By not using <= we ensure this is a stable sort
+				if (currItem.Next.Value == state)
+					ClosedList.RemoveAfter(currItem); // Remove with existing properties (== checks for ID match _not_ values)
+				if (currItem.Next != null && state.Fval > currItem.Next.Value.Fval) // By not using <= we ensure this is a stable sort
 					currItem = currItem.Next;
 				else
-					break;
+				{
+					ClosedList.AddAfter(currItem, state);
+					return;
+				}
 			}
 
-			if (currItem != null)
-				ClosedList.AddBefore(currItem, state);
-			else if (currItem == null && ClosedList.Count > 0)
-				ClosedList.AddLast(state);
-			else
-				ClosedList.AddFirst(state);
+			// The below will only execute when currItem.Next == null, since that is the only exit condition for the above while loop
+			ClosedList.AddAfter(currItem, state);
 		}
 
-		private CCState GetState(CCPos cc)
+		private void RemoveStateFromOpen(CCState state)
+		{
+			// Remove any matching state that is already in the list
+			var currItem = OpenList.First;
+			if (currItem != null && currItem.Value == state) // At least one item in the list
+				OpenList.RemoveFirst();
+
+			if (currItem is null)
+				return;
+
+			while (currItem != null && currItem.Next != null)
+			{
+				if (currItem.Next.Value == state)
+					OpenList.RemoveAfter(currItem); // Remove with existing properties (== checks for ID match _not_ values)
+				currItem = currItem.Next;
+			}
+		}
+
+		private void RemoveStateFromClosed(CCState state)
+		{
+			// Remove any matching state that is already in the list
+			var currItem = ClosedList.First;
+			if (currItem != null && currItem.Value == state) // At least one item in the list
+				ClosedList.RemoveFirst();
+
+			if (currItem == null)
+				return;
+
+			while (currItem != null && currItem.Next != null)
+			{
+				if (currItem.Next.Value == state)
+					ClosedList.RemoveAfter(currItem); // Remove with existing properties (== checks for ID match _not_ values)
+				currItem = currItem.Next;
+			}
+		}
+
+		CCState GetState(CCPos cc)
 		{
 			var ccKey = (cc.X, cc.Y);
 			if (!ccStateList.ContainsKey(ccKey))
@@ -356,42 +500,18 @@ namespace OpenRA.Mods.Common.Pathfinder
 		private void UpdateState(CCState ccState, CCState parentState)
 		{ UpdateState(ccState.CC, parentState); }
 
-		private void RemoveStateFromOpen(CCState state)
-		{
-			// Remove any matching state that is already in the list
-			var currItem = OpenList.First;
-			while (currItem != null)
-			{
-				if (currItem.Value == state)
-					OpenList.Remove(currItem); // Remove with existing properties (== checks for ID match _not_ values)
-				currItem = currItem.Next;
-			}
-		}
-
-		private void RemoveStateFromClosed(CCState state)
-		{
-			// Remove any matching state that is already in the list
-			var currItem = ClosedList.First;
-			while (currItem != null)
-			{
-				if (currItem.Value == state)
-					ClosedList.Remove(currItem); // Remove with existing properties (== checks for ID match _not_ values)
-				currItem = currItem.Next;
-			}
-		}
-
 		private void ResetLists()
 		{
-			OpenList = new LinkedList<CCState>();
-			ClosedList = new LinkedList<CCState>();
+			OpenList = new CustomLinkedList<CCState>();
+			ClosedList = new CustomLinkedList<CCState>();
 		}
 
 		private CCState PopFirstFromOpen()
 		{
-			var firstState = OpenList.First();
+			var firstState = OpenList.First;
 			OpenList.RemoveFirst();
-			AddStateToClosed(firstState);
-			return firstState;
+			AddStateToClosed(firstState.Value);
+			return firstState.Value;
 		}
 
 		// This will pad the ccPos in a path with a set amount of padding based on the actor's radius
@@ -454,7 +574,7 @@ namespace OpenRA.Mods.Common.Pathfinder
 				for (var i = 0; i < stateNeighbours.Count; i++)
 				{
 					var newParentState = GetState(stateNeighbours[i]);
-					if (ClosedList.Any(state => state.CC == newParentState.CC))
+					if (ClosedList.Contains(newParentState, x => x.CC))
 					{
 						var newGval = newParentState.Gval + ccState.GetEuclidDistanceTo(newParentState);
 						if (newGval < ccState.Gval)
@@ -473,6 +593,7 @@ namespace OpenRA.Mods.Common.Pathfinder
 		public void Initialize(WPos sourcePos, WPos destPos)
 		{
 			ResetLists();
+			overlay = self.World.WorldActor.TraitsImplementing<ThetaStarPathfinderOverlay>().FirstEnabledTraitOrDefault();
 
 			if (sourcePos == destPos)
 			{
@@ -530,7 +651,7 @@ namespace OpenRA.Mods.Common.Pathfinder
 			Dest = destPos;
 
 			var sourceCCPos = GetNearestCCPos(sourcePos);
-			var destCCPos = GetNearestCCPos(destPos);
+			destCCPos = GetNearestCCPos(destPos);
 
 			// If CCPos can be traversed to, but the cell is blocked, we traverse to the CCPos instead of the CPos
 			if (IsCellBlocked(thisWorld.Map.CPosFromCCPos(destCCPos)))
@@ -608,13 +729,13 @@ namespace OpenRA.Mods.Common.Pathfinder
 					var pathPos = new PathPos(thisWorld.Map.WPosFromCCPos(currState.CC), currState.CC);
 					// path.Add(thisWorld.Map.WPosFromCCPos(currState.CC)); // Swap above line with this if not using padding
 					path.Add(pathPos);
-					thisThetaCache.Add(currState, Dest, goalState.Gval); // add to cache for future look-ups
+					thisThetaCache.Add(currState, destCCPos, Dest, goalState.Gval); // add to cache for future look-ups, this is the best path from this particular position
 					currState = incrementFunc(currState);
 				}
 				// path.Add(sourcePos);
 				path.Reverse();
 
-				RenderPathIfOverlay(new List<WPos>() { Source }.Union(path.Select(pp => pp.wPos).ToList()).ToList());
+				RenderPathIfOverlay(new List<WPos>() { Source }.Union(path.ConvertAll(pp => pp.wPos)).ToList());
 			}
 			else
 				path = EmptyPath;
@@ -626,13 +747,13 @@ namespace OpenRA.Mods.Common.Pathfinder
 		{
 			var numCurrExpansions = 0;
 			maxCurrExpansions = inMaxCurrExpansions;
-			while (OpenList.Count > 0 && numCurrExpansions < maxCurrExpansions && numTotalExpansions < maxTotalExpansions)
+			while (!OpenList.IsEmpty() && numCurrExpansions < maxCurrExpansions && numTotalExpansions < maxTotalExpansions)
 			{
 				minState = PopFirstFromOpen();
 				if (goalState.Gval <= minState.Fval)
 					break;
-				else if (thisThetaCache.CheckIfInCache(minState, Dest))
-					if (minState.Gval + thisThetaCache.Get(minState, Dest).FinalHval <= minState.Fval)
+				else if (thisThetaCache.CheckIfInCache(minState, destCCPos))
+					if (minState.Gval + thisThetaCache.Get(minState, destCCPos).FinalHval <= minState.Fval)
 						break;
 
 				/* ---------------
@@ -652,13 +773,13 @@ namespace OpenRA.Mods.Common.Pathfinder
 					// if (minStateNeighbours.ElementAt(i) not in solved CCs) continue, otherwise skip this cell and check full path later
 					// Full path logic: All H-values should be stored distinctly from G-values. Subtract the G-value of the other unit,
 					// and add your own. This will let you re-use costs found earlier.
-					var succState = GetState(minStateNeighbours.ElementAt(i));
+					var succState = GetState(minStateNeighbours[i]);
 
-					succState.RenderInIfOverlay(thisWorld);
+					//succState.RenderInIfOverlay(thisWorld, overlay);
 
-					if (!ClosedList.Any(state => state.CC == succState.CC))
+					if (!ClosedList.Contains(succState, x => x.CC))
 					{
-						var newGval = newParentState.Gval + newParentState.GetEuclidDistanceTo(succState);
+						var newGval = newParentState.Gval + newParentState.GetEuclidDistanceTo(succState); // Since this is euclid distance, we can skip cells
 						if (newGval < succState.Gval) // && less than bestSavedGval
 						{
 							succState.Gval = newGval;
@@ -667,10 +788,12 @@ namespace OpenRA.Mods.Common.Pathfinder
 						}
 					}
 				}
+
+				//Console.WriteLine($"OpenList Count: {OpenList.Count}, ClosedList Count: {ClosedList.Count}, currExpansions: {numCurrExpansions}");
 			}
 
 			// If we have exhausted the OpenList, or the maximum number of expansions, we return a path, otherwise we return null
-			if (OpenList.Count == 0 || goalState.Gval < int.MaxValue || numTotalExpansions >= maxTotalExpansions)
+			if (OpenList.IsEmpty() || goalState.Gval < int.MaxValue || numTotalExpansions >= maxTotalExpansions)
 				UpdatePathIfFound();
 		}
 
@@ -786,23 +909,12 @@ namespace OpenRA.Mods.Common.Pathfinder
 			return cellsUnderneathLine;
 		}
 
-		public static void AddSelfAndNeighboursOfCPosToList(World world, CPos cp, ref List<CPos> inputCellList, int neighboursToCount = 1)
-		{
-			var minX = Math.Max(cp.X - neighboursToCount, 0);
-			var minY = Math.Max(cp.Y - neighboursToCount, 0);
-			var maxX = Math.Min(cp.X + neighboursToCount, world.Map.MapSize.X - 1);
-			var maxY = Math.Min(cp.Y + neighboursToCount, world.Map.MapSize.Y - 1);
-			for (var x = minX; x <= maxX; x++)
-				for (var y = minY; y <= maxY; y++)
-					if (!inputCellList.Contains(new CPos(x, y)))
-						inputCellList.Add(new CPos(x, y));
-		}
-
 		// Bresenham Line Algorithmng box of cells for a given line (WPos -> Wpos) https://en.wikipedia.org/wiki/Bresenham%27s_line_algorithm
-		public List<CPos> GetAllCellsUnderneathALine(WPos a0, WPos a1) { return GetAllCellsUnderneathALine(thisWorld, a0, a1); }
-		public static List<CPos> GetAllCellsUnderneathALine(World world, WPos a0, WPos a1, int neighboursToCount = 0)
+		public HashSet<CPos> GetAllCellsUnderneathALine(WPos a0, WPos a1) { return GetAllCellsUnderneathALine(thisWorld, a0, a1); }
+
+		public static HashSet<CPos> GetAllCellsUnderneathALine(World world, WPos a0, WPos a1, int neighboursToCount = 0)
 		{
-			var cellList = new List<CPos>();
+			var cellList = new HashSet<CPos>();
 			var ca0 = world.Map.CellContaining(a0);
 			var ca1 = world.Map.CellContaining(a1);
 			var x0 = ca0.X;
@@ -813,45 +925,59 @@ namespace OpenRA.Mods.Common.Pathfinder
 			var dy = -Math.Abs(y1 - y0);
 			var sx = x0 < x1 ? 1 : -1;
 			var sy = y0 < y1 ? 1 : -1;
-			var err = dx + dy;  // error value e_xy
-			var initialIter = true;
-			var currIter = 0;
+			var err = dx + dy;
 
-			while (true && x0 < world.Map.MapSize.X && currIter < 50000)
+			while (true)
 			{
-				if (!initialIter)
+				if (x0 >= 0 && x0 < world.Map.MapSize.X && y0 >= 0 && y0 < world.Map.MapSize.Y)
 				{
-					if (x0 == x1 && y0 == y1)
-						break;
-					var e2 = 2 * err;
-					if (e2 >= dy) // e_xy+e_x > 0
-					{
-						err += dy;
-						x0 += sx;
-					}
-					if (e2 <= dx) // e_xy+e_y < 0
-					{
-						err += dx;
-						y0 += sy;
-					}
-				}
-				initialIter = false;
-				var newCPos = new CPos(x0, y0);
-				if (neighboursToCount > 0)
-					AddSelfAndNeighboursOfCPosToList(world, newCPos, ref cellList, neighboursToCount);
-				else
-					if (!cellList.Contains(newCPos) && CPosinMap(newCPos, world))
+					var newCPos = new CPos(x0, y0);
+					if (neighboursToCount > 0)
+						AddSelfAndNeighboursOfCPosToList(world, newCPos, ref cellList, neighboursToCount);
+					else
 						cellList.Add(newCPos);
-				currIter += 1;
+				}
+
+				if (x0 == x1 && y0 == y1)
+					break;
+
+				var e2 = 2 * err;
+				if (e2 >= dy)
+				{
+					err += dy;
+					x0 += sx;
+				}
+				if (e2 <= dx)
+				{
+					err += dx;
+					y0 += sy;
+				}
 			}
+
 			return cellList;
 		}
 
-		public bool AreCellsIntersectingPath(List<CPos> cells, WPos sourcePos, WPos destPos)
+		public static void AddSelfAndNeighboursOfCPosToList(World world, CPos cp, ref HashSet<CPos> inputCellList, int neighboursToCount = 1)
+		{
+			var minX = Math.Max(cp.X - neighboursToCount, 0);
+			var minY = Math.Max(cp.Y - neighboursToCount, 0);
+			var maxX = Math.Min(cp.X + neighboursToCount, world.Map.MapSize.X - 1);
+			var maxY = Math.Min(cp.Y + neighboursToCount, world.Map.MapSize.Y - 1);
+
+			for (var x = minX; x <= maxX; x++)
+			{
+				for (var y = minY; y <= maxY; y++)
+				{
+					inputCellList.Add(new CPos(x, y));
+				}
+			}
+		}
+
+		public bool AreCellsIntersectingPath(HashSet<CPos> cells, WPos sourcePos, WPos destPos)
 		{ return AreCellsIntersectingPath(thisWorld, self, locomotor, cells, sourcePos, destPos); }
 
 		public static bool AreCellsIntersectingPath(World world, Actor self, Locomotor locomotor,
-													List<CPos> cells, WPos sourcePos, WPos destPos)
+													HashSet<CPos> cells, WPos sourcePos, WPos destPos)
 		{
 			foreach (var cell in cells)
 			{
@@ -1002,6 +1128,7 @@ namespace OpenRA.Mods.Common.Pathfinder
 				   (TRBlocked && BLBlocked && !TLBlocked && !BRBlocked);
 		}
 
+		// NOTE: DiagBlocked means cells blocked are checkered (e.g. for a 2x2 grid the top left and bottom right are blocked or top right and bottom left are blocked)
 		static List<CCPos> GetUnblockedNeighbours(World world, Actor self, Locomotor locomotor, CCPos cc,
 			bool excDiagBlocked = true, BlockedByActor check = BlockedByActor.Immovable)
 		{
@@ -1019,10 +1146,12 @@ namespace OpenRA.Mods.Common.Pathfinder
 			var ccL = new CCPos(cc.X - 1, cc.Y, cc.Layer);
 			var ccR = new CCPos(cc.X + 1, cc.Y, cc.Layer);
 
-			var TLBlocked = CellSurroundingCCPosIsBlocked(world, self, locomotor, cc, CellSurroundingCorner.TopLeft, check);
-			var TRBlocked = CellSurroundingCCPosIsBlocked(world, self, locomotor, cc, CellSurroundingCorner.TopRight, check);
-			var BLBlocked = CellSurroundingCCPosIsBlocked(world, self, locomotor, cc, CellSurroundingCorner.BottomLeft, check);
-			var BRBlocked = CellSurroundingCCPosIsBlocked(world, self, locomotor, cc, CellSurroundingCorner.BottomRight, check);
+			bool CellSurroundingCCIsBlocked(CCPos x, CellSurroundingCorner corner) => CellSurroundingCCPosIsBlocked(world, self, locomotor, x, corner, check);
+
+			var TLBlocked = CellSurroundingCCIsBlocked(cc, CellSurroundingCorner.TopLeft);
+			var TRBlocked = CellSurroundingCCIsBlocked(cc, CellSurroundingCorner.TopRight);
+			var BLBlocked = CellSurroundingCCIsBlocked(cc, CellSurroundingCorner.BottomLeft);
+			var BRBlocked = CellSurroundingCCIsBlocked(cc, CellSurroundingCorner.BottomRight);
 
 			var topBlocked = TLBlocked && TRBlocked;
 			var botBlocked = BLBlocked && BRBlocked;
@@ -1031,23 +1160,30 @@ namespace OpenRA.Mods.Common.Pathfinder
 
 			if (CcinMap(ccT, world) && !topBlocked)
 				neighbourList.Add(ccT);
-			if (CcinMap(ccTL, world) && !TLBlocked)
+			if (CcinMap(ccTL, world) && !TLBlocked &&
+				(!excDiagBlocked || (!CellSurroundingCCIsBlocked(ccTL, CellSurroundingCorner.BottomLeft) &&
+									 !CellSurroundingCCIsBlocked(ccTL, CellSurroundingCorner.TopRight))))
 				neighbourList.Add(ccTL);
-			if (CcinMap(ccTR, world) && !TRBlocked)
+			if (CcinMap(ccTR, world) && !TRBlocked &&
+				(!excDiagBlocked || (!CellSurroundingCCIsBlocked(ccTR, CellSurroundingCorner.BottomRight) &&
+									 !CellSurroundingCCIsBlocked(ccTR, CellSurroundingCorner.TopLeft))))
 				neighbourList.Add(ccTR);
 			if (CcinMap(ccB, world) && !botBlocked)
 				neighbourList.Add(ccB);
-			if (CcinMap(ccBL, world) && !BLBlocked)
+			if (CcinMap(ccBL, world) && !BLBlocked &&
+				(!excDiagBlocked || (!CellSurroundingCCIsBlocked(ccBL, CellSurroundingCorner.TopLeft) &&
+									 !CellSurroundingCCIsBlocked(ccBL, CellSurroundingCorner.BottomRight))))
 				neighbourList.Add(ccBL);
-			if (CcinMap(ccBR, world) && !BRBlocked)
+			if (CcinMap(ccBR, world) && !BRBlocked &&
+				(!excDiagBlocked || (!CellSurroundingCCIsBlocked(ccBR, CellSurroundingCorner.TopRight) &&
+									 !CellSurroundingCCIsBlocked(ccBR, CellSurroundingCorner.BottomLeft))))
 				neighbourList.Add(ccBR);
 			if (CcinMap(ccL, world) && !leftBlocked)
 				neighbourList.Add(ccL);
 			if (CcinMap(ccR, world) && !rightBlocked)
 				neighbourList.Add(ccR);
 
-			// Exclude diagonally blocked corners if parameter used (default is that it is)
-			return excDiagBlocked ? neighbourList.Where(c => !DiagBlockedCCPos(self, world, locomotor, c)).ToList() : neighbourList;
+			return neighbourList;
 		}
 
 		#region Constructors

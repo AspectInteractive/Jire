@@ -9,6 +9,7 @@
  */
 #endregion
 
+using System;
 using System.Collections.Generic;
 using OpenRA.Graphics;
 using OpenRA.Traits;
@@ -39,8 +40,9 @@ namespace OpenRA.Mods.Common.Traits
 		}
 
 		World world;
-		Dictionary<(CCPos, WPos), CCStateWithGoal> ccStateCache = new Dictionary<(CCPos, WPos), CCStateWithGoal>();
-		private Queue<(CCPos, WPos)> keys = new Queue<(CCPos, WPos)>();
+		//Dictionary<(CCPos, WPos), CCStateWithGoal> ccStateCache = new Dictionary<(CCPos, WPos), CCStateWithGoal>();
+		Dictionary<(CCPos, CCPos), CCStateWithGoal> ccStateCache = new();
+		private Queue<(CCPos, CCPos)> keys = new();
 		private int capacity = 10000;
 
 		public ThetaStarCache()
@@ -52,18 +54,18 @@ namespace OpenRA.Mods.Common.Traits
 			world = w;
 		}
 
-		public void AddWithAllParents(CCState ccState, WPos goalPos, int finalGval)
-		{
-			Add(ccState, goalPos, finalGval);
-			var parentState = ccState.ParentState;
-			while (parentState != null)
-			{
-				Add(parentState, goalPos, finalGval);
-				parentState = parentState.ParentState;
-			}
-		}
+		//public void AddWithAllParents(CCState ccState, WPos goalPos, int finalGval)
+		//{
+		//	Add(ccState, goalPos, finalGval);
+		//	var parentState = ccState.ParentState;
+		//	while (parentState != null)
+		//	{
+		//		Add(parentState, goalPos, finalGval);
+		//		parentState = parentState.ParentState;
+		//	}
+		//}
 
-		public void Add(CCState ccState, WPos goalPos, int finalGval)
+		public void Add(CCState ccState, CCPos goalCCPos, WPos goalPos, int finalGval)
 		{
 			if (ccStateCache.Count >= capacity)
 			{
@@ -71,16 +73,22 @@ namespace OpenRA.Mods.Common.Traits
 				ccStateCache.Remove(oldestKey);
 			}
 
-			var ccKey = (ccState.CC, goalPos);
-			ccStateCache.Add(ccKey, new CCStateWithGoal(ccState, goalPos, finalGval));
+			var ccKey = (ccState.CC, goalCCPos);
+			ccStateCache[ccKey] = new CCStateWithGoal(ccState, goalPos, finalGval);
 			keys.Enqueue(ccKey);
 		}
 
-		public bool CheckIfInCache(CCState ccState, WPos goalPos) { return ccStateCache.ContainsKey((ccState.CC, goalPos)); }
-
-		public CCStateWithGoal Get(CCState ccState, WPos goalPos)
+		public bool CheckIfInCache(CCState ccState, CCPos goalCCPos)
 		{
-			var ccKey = (ccState.CC, goalPos);
+			var inCache = ccStateCache.ContainsKey((ccState.CC, goalCCPos));
+			//if (inCache)
+			//	Console.WriteLine($"CheckIfInCache: {inCache}");
+			return inCache;
+		}
+
+		public CCStateWithGoal Get(CCState ccState, CCPos goalCCPos)
+		{
+			var ccKey = (ccState.CC, goalCCPos);
 			if (!ccStateCache.ContainsKey(ccKey))
 				return null;
 			return ccStateCache[ccKey];
