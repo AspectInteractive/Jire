@@ -17,14 +17,14 @@ using OpenRA.Scripting;
 
 namespace OpenRA
 {
-	public class CCPos : IScriptBindable, ILuaAdditionBinding, ILuaSubtractionBinding, ILuaEqualityBinding, ILuaTableBinding, IEquatable<CPos>
+	public class CCPos : IScriptBindable, ILuaAdditionBinding, ILuaSubtractionBinding, ILuaEqualityBinding, ILuaTableBinding, IEquatable<CCPos>
 	{
 		public const int TL = 0;
 		public const int TR = 1;
 		public const int BL = 2;
 		public const int BR = 3;
 
-		public Dictionary<int, bool> Blocked = new Dictionary<int, bool>()
+		public Dictionary<int, bool> Blocked = new()
 													{
 														{ TL, false },
 														{ TR, false },
@@ -66,7 +66,7 @@ namespace OpenRA
 
 		public CCPos(int x, int y, byte layer) { XYLayerToBits(ref Bits, x, y, layer); }
 
-		public static readonly CCPos Zero = new CCPos(0, 0, 0);
+		public static readonly CCPos Zero = new(0, 0, 0);
 
 		public static explicit operator CCPos(int2 a) { return new CCPos(a.X, a.Y); }
 
@@ -80,8 +80,8 @@ namespace OpenRA
 
 		public override int GetHashCode() { return Bits.GetHashCode(); }
 
-		public bool Equals(CPos other) { return Bits == other.Bits; }
-		public override bool Equals(object obj) { return obj is CPos && Equals((CPos)obj); }
+		public bool Equals(CCPos other) { return Bits == other.Bits; }
+		public override bool Equals(object obj) { return obj is CCPos ccPos && Equals(ccPos); }
 
 		public override string ToString() { return X + "," + Y; }
 

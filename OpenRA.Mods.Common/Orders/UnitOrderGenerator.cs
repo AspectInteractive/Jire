@@ -52,9 +52,6 @@ namespace OpenRA.Mods.Common.Orders
 		public virtual IEnumerable<Order> Order(World world, CPos cell, int2 worldPixel, MouseInput mi)
 		{
 			var target = TargetForInput(world, cell, worldPixel, mi);
-			#if DEBUG
-			System.Console.WriteLine($"Order issued with targCenterPos {target.CenterPosition} at {(System.DateTime.Now.Ticks / System.TimeSpan.TicksPerMillisecond)}");
-			#endif
 			var actorsAt = world.ActorMap.GetActorsAt(cell).ToList();
 			var orders = world.Selection.Actors
 				.Select(a => OrderForUnit(a, target, cell, mi))
