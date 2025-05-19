@@ -816,9 +816,6 @@ namespace OpenRA.Mods.Common.Traits
 					.Zip(unitHitShape.GetCorners((selfCenter + move).XYToInt2())).ToList();
 		}
 
-		//public static bool CellIsBlocked(Actor self, Locomotor locomotor, CPos cell, BlockedByActor check = BlockedByActor.Immovable)
-		//	=> locomotor.CanMoveFreelyInto(self, cell, SubCell.FullCell, BlockedByActor.Immovable, self, false);
-
 		public static bool CellIsBlocked(Actor self, Locomotor locomotor, CPos cell, BlockedByActor check = BlockedByActor.Immovable)
 		{
 			return locomotor.MovementCostToEnterCell(self, cell, check, self, true) == short.MaxValue ||
@@ -1706,9 +1703,6 @@ namespace OpenRA.Mods.Common.Traits
 
 				var target = Target.FromPos(order.Target.TerrainCenterPosition);
 				self.QueueActivity(order.Queued, new MoveOffGrid(self, order.GroupedActors.ToList(), target, targetLineColor: Info.TargetLineColor));
-#if DEBUG
-				System.Console.WriteLine("ResolveOrder() with 'Move' to (" + order.Target.CenterPosition.X.ToString() + "," + order.Target.CenterPosition.Y.ToString() + ") called at " + (System.DateTime.Now.Ticks / System.TimeSpan.TicksPerMillisecond));
-#endif
 				self.ShowTargetLines();
 			}
 			else if (orderString == "Land")
@@ -1761,9 +1755,6 @@ namespace OpenRA.Mods.Common.Traits
 
 				self.CancelActivity();
 				UnReserve();
-#if DEBUG
-				System.Console.WriteLine("ResolveOrder() with 'Stop' called at " + (System.DateTime.Now.Ticks / System.TimeSpan.TicksPerMillisecond));
-#endif
 			}
 			else if (orderString == "ReturnToBase")
 			{

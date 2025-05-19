@@ -13,6 +13,8 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
+using Linguini.Syntax.Ast;
+using System.Text.RegularExpressions;
 using OpenRA.Activities;
 using OpenRA.Mods.Common.HitShapes;
 using OpenRA.Mods.Common.Pathfinder;
@@ -130,18 +132,19 @@ namespace OpenRA.Mods.Common.Activities
 
 		public WDist MaxRangeToTarget()
 		{
-			var maxRange = WDist.Zero;
 			var actorMobileOgs = ActorsSharingMove.Where(a => !a.Actor.IsDead).Select(a => a.Trait).ToList();
 
-			if (actorMobileOgs.Count > 0)
+			if (actorMobileOgs.Count > 1)
 			{
 				var avgUnitRadius = actorMobileOgs.Average(a => a.UnitRadius.Length);
 				// Formula for radius of the smallest circle of N units clustered together having fixed UnitRadius R: (R * (1 + 1 / sin(π / N))
 				var smallestCircleRadiusWithUnits = (Fix64)avgUnitRadius * ((Fix64)1 + (Fix64)1 / Fix64.Sin(Fix64.Pi / (Fix64)actorMobileOgs.Count));
-				maxRange = new WDist((int)smallestCircleRadiusWithUnits);
+				return new WDist((int)smallestCircleRadiusWithUnits);
 			}
+			else if (actorMobileOgs.Count == 1)
+				return new WDist(actorMobileOgs.FirstOrDefault().UnitRadius.Length);
 
-			return maxRange;
+			return WDist.Zero;
 		}
 
 		void InsertNewTarget(WPos target)
@@ -355,6 +358,9 @@ namespace OpenRA.Mods.Common.Activities
 			WPos? initialTargetPosition = null, Color? targetLineColor = null)
 			: this(self, new List<Actor>(), t, initialTargetPosition, targetLineColor) { }
 
+		// NOTE: The below code for OnFirstRun() must run within OnFirstRun() rather than MoveOffGrid(), since it has to run only once for _all_ actors within
+		// a grouped move command. If this code is placed in MoveOffGrid() instead it will run N times for N actors, causing significant performance issues,
+		// unless a work-around is devised for ensuring Theta execution manager does not add actors separately.
 		protected override void OnFirstRun(Actor self)
 		{
 			usePathFinder = true;
@@ -504,10 +510,16 @@ namespace OpenRA.Mods.Common.Activities
 			}
 
 			// Will not move unless there is a path to move on
-			if (mobileOffGrid.CurrThetaSearch == null && pathRemaining.Count == 0 && currPathTarget == WPos.Zero)
+			if (pathRemaining.Count == 0 && currPathTarget == WPos.Zero)
 			{
-				EndingActions();
-				return Complete();
+				// Abort if there is no theta path to traverse
+				if (!firstMove && mobileOffGrid.CurrThetaSearch == null)
+				{
+					EndingActions();
+					return Complete();
+				}
+
+				return false;
 			}
 
 			var nearbyActorsSharingMove = GetNearbyActorsSharingMove(self, false);
@@ -550,8 +562,8 @@ namespace OpenRA.Mods.Common.Activities
 				}
 			}
 
-			//if (tickCount == 0) // We cannot run this every tick as it is too performance intensive
-			if (self.CurrentActivity is not ReturnToCellActivity)
+			// Do not use local avoidance if Theta path has not been found, as it will cripple performance
+			if (pathFound && self.CurrentActivity is not ReturnToCellActivity)
 				UpdateSeekVecWithLocalAvoidance(self);
 
 			if (mobileOffGrid.PositionBuffer.Count >= 3)
@@ -677,6 +689,8 @@ namespace OpenRA.Mods.Common.Activities
 
 		public void UpdateSeekVecWithLocalAvoidance(Actor self)
 		{
+			return;
+
 			// Cannot change seek vector if none exists
 			if (mobileOffGrid.SeekVectors.Count <= 0)
 				return;
