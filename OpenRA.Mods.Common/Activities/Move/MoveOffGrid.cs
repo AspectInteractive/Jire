@@ -130,21 +130,26 @@ namespace OpenRA.Mods.Common.Activities
 			return blockedDirections;
 		}
 
-		public WDist MaxRangeToTarget()
+		public WDist MaxRangeToTarget(double ratio = 0.5)
 		{
+			var maxRange = WDist.Zero;
 			var actorMobileOgs = ActorsSharingMove.Where(a => !a.Actor.IsDead).Select(a => a.Trait).ToList();
 
 			if (actorMobileOgs.Count > 1)
 			{
 				var avgUnitRadius = actorMobileOgs.Average(a => a.UnitRadius.Length);
 				// Formula for radius of the smallest circle of N units clustered together having fixed UnitRadius R: (R * (1 + 1 / sin(π / N))
-				var smallestCircleRadiusWithUnits = (Fix64)avgUnitRadius * ((Fix64)1 + (Fix64)1 / Fix64.Sin(Fix64.Pi / (Fix64)actorMobileOgs.Count));
-				return new WDist((int)smallestCircleRadiusWithUnits);
+				var smallestCircleRadiusWithUnits = (Fix64)avgUnitRadius *
+					((Fix64)1 + (Fix64)1 / Fix64.Sin(Fix64.Pi / (Fix64)actorMobileOgs.Count)) * (Fix64)ratio;
+				maxRange = new WDist((int)smallestCircleRadiusWithUnits);
 			}
 			else if (actorMobileOgs.Count == 1)
-				return new WDist(actorMobileOgs.FirstOrDefault().UnitRadius.Length);
+				maxRange = new WDist(actorMobileOgs.FirstOrDefault().UnitRadius.Length);
 
-			return WDist.Zero;
+			if (maxRange != WDist.Zero)
+				Console.WriteLine(maxRange);
+
+			return maxRange;
 		}
 
 		void InsertNewTarget(WPos target)
@@ -548,8 +553,6 @@ namespace OpenRA.Mods.Common.Activities
 				return true;
 			}
 
-			var checkTarget = useLastVisibleTarget ? lastVisibleTarget : target;
-
 			// For Attack Move, we stop when we are within firing range of the target
 			if (minRange != WDist.Zero || maxRange != WDist.Zero)
 			{
@@ -621,13 +624,19 @@ namespace OpenRA.Mods.Common.Activities
 				//	mobileOffGrid.PositionBuffer.Clear();
 			}
 
+			// Since units are more spread out during movement, 
+			var ratio = 0.5;
+			if (currPathTarget == FinalPathTarget)
+				ratio = 1.0;
+			var maxGoalRange = MaxRangeToTarget(ratio);
+
 			var selfHasReachedGoal = Delta.HorizontalLengthSquared < mobileOffGrid.UnitRadius.LengthSquared;
 			var completedTargsOfNearbyActors = CompletedTargetsOfActors(GetNearbyActorsSharingMove(self));
 			tickCount = tickCount >= maxTicksBeforeLOScheck ? tickCount = 0 : tickCount + 1;
 			var nearbyActorHasReachedGoal = tickCount == 0 &&
 				completedTargsOfNearbyActors.Contains(currPathTarget) &&
 				//pathRemaining.Count == 0 && // Enable this if you want line formation rather than grouped movement
-				Delta.Length < mobileOffGrid.GenFinalWVec().Length + MaxRangeToTarget().Length;
+				Delta.Length < mobileOffGrid.GenFinalWVec().Length + maxGoalRange.Length;
 
 			var hasReachedGoal = selfHasReachedGoal || nearbyActorHasReachedGoal;
 

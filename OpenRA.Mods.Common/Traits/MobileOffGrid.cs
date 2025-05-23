@@ -642,7 +642,21 @@ namespace OpenRA.Mods.Common.Traits
 						{
 							var nearbyActorMobileOG = nearbyActorMobileOGs.FirstOrDefault();
 							var repulsionMvVec = new MvVec(RepulsionVecFunc(MovementSpeed, CenterPosition, nearbyActorMobileOG.CenterPosition), 1);
-							FleeVectors.Add(repulsionMvVec);
+
+							// Create hypothetical movement using flee vector to test if intersecting
+							var proposedWVec = GenFinalWVec(SeekVectors, FleeVectors.Union(new List<MvVec>() { repulsionMvVec }).ToList());
+							var intersectingEdges = GetIntersectingEdges(self.CenterPosition, proposedWVec, 1, Locomotor);
+							if (intersectingEdges.Count == 0)
+								FleeVectors.Add(repulsionMvVec);
+							else
+							{
+								// Remove any X or Y movement that causes the repulsion to intersect with an edge of a cell
+								var repulsionVector = repulsionMvVec.Vec;
+								foreach (var edge in intersectingEdges)
+									repulsionVector = RemoveVecOfIntersectingEdge(edge, repulsionVector);
+								if (repulsionVector.X != 0 || repulsionVector.Y != 0) // do not add flee vectors that have both X and Y as 0
+									FleeVectors.Add(new MvVec(repulsionVector, 1));
+							}
 						}
 					}
 				}
@@ -681,6 +695,11 @@ namespace OpenRA.Mods.Common.Traits
 					blockedByCells.Contains(BlockedByCell.BottomRight)) && newMoveY > 0)
 				newMoveY = 0;
 
+			if (newMoveX == 0 && newMoveY != 0)
+				newMoveY += move.Length;
+			else if (newMoveX != 0 && newMoveY == 0)
+				newMoveX += move.Length;
+
 			return new WVec(newMoveX, newMoveY, move.Z);
 		}
 
@@ -701,6 +720,38 @@ namespace OpenRA.Mods.Common.Traits
 
 		public void AddCellCollisionFleeVectors()
 		{
+			List<CPos> CellsCollidingWithActor(Actor self, WVec move, int lookAhead, Locomotor locomotor,
+											bool incOrigin = false, int skipLookAheadAmt = 0)
+				=> CellsCollidingWithPos(self, self.CenterPosition, move, lookAhead, locomotor, incOrigin, skipLookAheadAmt);
+
+			List<CPos> CellsCollidingWithPos(Actor self, WPos selfPos, WVec move, int lookAhead, Locomotor locomotor,
+												bool incOrigin = false, int skipLookAheadAmt = 0)
+			{
+				var cellsColliding = new List<CPos>();
+				var selfCenterPos = selfPos.XYToInt2();
+				var selfCenterPosWithMoves = new List<int2>();
+				var startI = skipLookAheadAmt == 0 ? 0 : skipLookAheadAmt - 1;
+				// for each actor we are potentially colliding with
+				var selfShapes = self.TraitsImplementing<HitShape>().Where(Exts.IsTraitEnabled);
+				foreach (var selfShape in selfShapes)
+				{
+					var hitShapeCorners = selfShape.Info.Type.GetCorners(selfCenterPos);
+					foreach (var corner in hitShapeCorners)
+					{
+						var cell = self.World.Map.CellContaining(corner);
+						for (var i = startI; i < lookAhead; i++)
+						{
+							var cellToTest = self.World.Map.CellContaining(corner + move * i);
+							if (CellIsBlocked(self, locomotor, cellToTest, BlockedByActor.Immovable) && !cellsColliding.Contains(cellToTest))
+								cellsColliding.Add(cellToTest);
+						}
+						if (incOrigin && CellIsBlocked(self, locomotor, cell, BlockedByActor.Immovable) && !cellsColliding.Contains(cell))
+							cellsColliding.Add(cell);
+					}
+				}
+				return cellsColliding;
+			}
+
 			if (SeekVectors.Count == 0)
 				return;
 
@@ -711,7 +762,7 @@ namespace OpenRA.Mods.Common.Traits
 				return -new WVec(new WDist(distToMove), WRot.FromYaw(repulsionDelta.Yaw));
 			}
 
-			//// Check collision with walls
+			// Check collision with walls
 			var cellsCollidingSet = new List<CPos>();
 			cellsCollidingSet.AddRange(CellsCollidingWithActor(self, SeekVectors[0].Vec, 3, Locomotor));
 			cellsCollidingSet.AddRange(CellsCollidingWithActor(self, SeekVectors[0].Vec, 2, Locomotor));
@@ -728,7 +779,11 @@ namespace OpenRA.Mods.Common.Traits
 
 		public void MobileOffGridMoveTick(Actor self)
 		{
+			AddCellCollisionFleeVectors();
+
 			var move = ForcedMove == WVec.Zero ? GenFinalWVec() : ForcedMove;
+			//if (self.CurrentActivity is not ReturnToCellActivity)
+			//	move = RemoveBlockedVectors(move, BlockedByCells);
 
 			if (!SearchingForNextTarget && CurrPathTarget != WPos.Zero)
 			{
@@ -738,8 +793,6 @@ namespace OpenRA.Mods.Common.Traits
 
 			RenderPathingStats();
 			//RenderCurrPathTarget();
-
-			AddCellCollisionFleeVectors();
 
 			// Remove vectors if unit is blocked
 			//if (self.CurrentActivity is not ReturnToCellActivity)
@@ -861,14 +914,6 @@ namespace OpenRA.Mods.Common.Traits
 			return blockedDirections;
 		}
 
-		// This is a look ahead repel from cells that the unit is about to move into - hence the 'lookAhead' parameter
-		// It returns the list of cells that collide with the actor, for use with repulsion
-		public List<CPos> CellsCollidingWithActor(Actor self, WVec move, int lookAhead, Locomotor locomotor)
-			=> CellsCollidingWithPos(self, self.CenterPosition, move, lookAhead, locomotor);
-
-		public List<CPos> CellsCollidingWithPos(Actor self, WPos selfPos, WVec move, int lookAhead, Locomotor locomotor)
-			=> GetCollidingCellsAfterUnitMovement(selfPos, move, locomotor, lookAhead, BlockedByActor.Immovable).ToList();
-
 		// Main cell collision method, do not touch!
 		public IEnumerable<CPos> GetCollidingCellsAfterUnitMovement(WPos selfPos, WVec move, Locomotor locomotor, int lookAhead = 1,
 			BlockedByActor check = BlockedByActor.Immovable, int neighboursToCount = 0)
@@ -887,11 +932,6 @@ namespace OpenRA.Mods.Common.Traits
 				}
 			}
 		}
-
-		// This is used for detecting if any cell has collided
-		// Unlike CellsCollidingWithPos, it does not need to keep a list of cells and can exit early
-		public bool CellsCollidingWithPosBool(Actor self, WPos selfPos, WVec move, int lookAhead, Locomotor locomotor)
-			=> GetCollidingCellsAfterUnitMovement(selfPos, move, locomotor, lookAhead, BlockedByActor.Immovable).Any();
 
 		public static bool ValidCollisionActor(Actor actor)
 		{
