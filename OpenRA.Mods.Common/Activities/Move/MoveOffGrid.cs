@@ -132,7 +132,6 @@ namespace OpenRA.Mods.Common.Activities
 
 		public WDist MaxRangeToTarget(double ratio = 0.5)
 		{
-			var maxRange = WDist.Zero;
 			var actorMobileOgs = ActorsSharingMove.Where(a => !a.Actor.IsDead).Select(a => a.Trait).ToList();
 
 			if (actorMobileOgs.Count > 1)
@@ -141,15 +140,12 @@ namespace OpenRA.Mods.Common.Activities
 				// Formula for radius of the smallest circle of N units clustered together having fixed UnitRadius R: (R * (1 + 1 / sin(π / N))
 				var smallestCircleRadiusWithUnits = (Fix64)avgUnitRadius *
 					((Fix64)1 + (Fix64)1 / Fix64.Sin(Fix64.Pi / (Fix64)actorMobileOgs.Count)) * (Fix64)ratio;
-				maxRange = new WDist((int)smallestCircleRadiusWithUnits);
+				return new WDist((int)smallestCircleRadiusWithUnits);
 			}
 			else if (actorMobileOgs.Count == 1)
-				maxRange = new WDist(actorMobileOgs.FirstOrDefault().UnitRadius.Length);
+				return new WDist(actorMobileOgs.FirstOrDefault().UnitRadius.Length);
 
-			if (maxRange != WDist.Zero)
-				Console.WriteLine(maxRange);
-
-			return maxRange;
+			return WDist.Zero;
 		}
 
 		void InsertNewTarget(WPos target)
@@ -499,7 +495,7 @@ namespace OpenRA.Mods.Common.Activities
 				pathRemaining = GetThetaPathAndConvert(self);
 
 				// Default movement if no path is found
-				if (pathRemaining.Count == 0)
+				if (pathRemaining.Count == 0) // NOTE: Add "|| true" to this condition to ignore the pathfinder for testing only
 					pathRemaining = new List<WPos>() { target.CenterPosition };
 
 				GetNextTargetOrComplete(self);

@@ -695,11 +695,6 @@ namespace OpenRA.Mods.Common.Traits
 					blockedByCells.Contains(BlockedByCell.BottomRight)) && newMoveY > 0)
 				newMoveY = 0;
 
-			if (newMoveX == 0 && newMoveY != 0)
-				newMoveY += move.Length;
-			else if (newMoveX != 0 && newMoveY == 0)
-				newMoveX += move.Length;
-
 			return new WVec(newMoveX, newMoveY, move.Z);
 		}
 
@@ -752,9 +747,6 @@ namespace OpenRA.Mods.Common.Traits
 				return cellsColliding;
 			}
 
-			if (SeekVectors.Count == 0)
-				return;
-
 			WVec RepulsionVecFunc(WPos selfPos, WPos cellPos)
 			{
 				var repulsionDelta = cellPos - selfPos;
@@ -764,9 +756,9 @@ namespace OpenRA.Mods.Common.Traits
 
 			// Check collision with walls
 			var cellsCollidingSet = new List<CPos>();
-			cellsCollidingSet.AddRange(CellsCollidingWithActor(self, SeekVectors[0].Vec, 3, Locomotor));
-			cellsCollidingSet.AddRange(CellsCollidingWithActor(self, SeekVectors[0].Vec, 2, Locomotor));
-			cellsCollidingSet.AddRange(CellsCollidingWithActor(self, SeekVectors[0].Vec, 1, Locomotor));
+			cellsCollidingSet.AddRange(CellsCollidingWithActor(self, GenFinalWVec(), 3, Locomotor));
+			cellsCollidingSet.AddRange(CellsCollidingWithActor(self, GenFinalWVec(), 2, Locomotor));
+			cellsCollidingSet.AddRange(CellsCollidingWithActor(self, GenFinalWVec(), 1, Locomotor));
 
 			// Used by MobileOffGrid to suppress movement in the direction that the unit is being blocked
 			BlockedByCells = DirectionOfCellsBlockingPos(self, CenterPosition, cellsCollidingSet);
@@ -779,11 +771,12 @@ namespace OpenRA.Mods.Common.Traits
 
 		public void MobileOffGridMoveTick(Actor self)
 		{
+			// Remove vectors if unit is blocked
 			AddCellCollisionFleeVectors();
 
 			var move = ForcedMove == WVec.Zero ? GenFinalWVec() : ForcedMove;
-			//if (self.CurrentActivity is not ReturnToCellActivity)
-			//	move = RemoveBlockedVectors(move, BlockedByCells);
+			if (self.CurrentActivity is not ReturnToCellActivity)
+				move = RemoveBlockedVectors(move, BlockedByCells);
 
 			if (!SearchingForNextTarget && CurrPathTarget != WPos.Zero)
 			{
@@ -793,13 +786,6 @@ namespace OpenRA.Mods.Common.Traits
 
 			RenderPathingStats();
 			//RenderCurrPathTarget();
-
-			// Remove vectors if unit is blocked
-			//if (self.CurrentActivity is not ReturnToCellActivity)
-			//	move = RemoveBlockedVectors(move, BlockedByCells);
-
-			if (ActorsCollidingWithActorBool(CenterPosition, move, UnitRadius * 2, Locomotor, attackingUnitsOnly: true))
-				GetBestNonCollidingMovement();
 
 			if (move == WVec.Zero &&
 			   (GenFinalWVec(WVecTypes.Seek, false) != -GenFinalWVec(WVecTypes.Flee, false) ||
@@ -826,7 +812,6 @@ namespace OpenRA.Mods.Common.Traits
 			var turnSpeed = GetTurnSpeed(false);
 			//DesiredFacing = -WAngle.ArcTan(CenterPosition.Y - CurrPathTarget.Y, CenterPosition.X - CurrPathTarget.X) + new WAngle(256);
 			Facing = Util.TickFacing(Facing, DesiredFacing == WAngle.Zero ? move.Yaw : DesiredFacing, turnSpeed);
-			//Console.WriteLine($"DesiredFacing: {DesiredFacing}, Facing: {Facing}, move.Yaw: {move.Yaw}");
 
 			if (Info.Roll != WAngle.Zero)
 			{
