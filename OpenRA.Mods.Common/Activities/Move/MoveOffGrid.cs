@@ -36,6 +36,8 @@ namespace OpenRA.Mods.Common.Activities
 {
 	public class MoveOffGrid : Activity
 	{
+		const int LineThickness = 1;
+
 		readonly MobileOffGrid mobileOffGrid;
 		WVec Delta => currPathTarget - mobileOffGrid.CenterPosition;
 		readonly WDist maxRange;
@@ -49,39 +51,10 @@ namespace OpenRA.Mods.Common.Activities
 
 		// Options for pathfinder (chosen in the constructor)
 		bool usePathFinder = true;
-		bool useLocalAvoidance = true;
 		bool usingLocalAvoidance = false;
 		string chosenIntersectSide = "";
-		readonly WDist localAvoidanceDist;
 
 		MoveType moveType = MoveType.Undefined;
-
-#pragma warning disable SA1137 // Elements should have the same indentation
-
-		readonly List<int> localAvoidanceAngleOffsetsLeft = new()
-		{
-			 0, -64, -128, -192,
-			-256, -320, -384,
-			-448, -512, -576,
-			-640, -704, -768,
-			-832, -896, -960,
-			-1024
-		};
-
-		readonly List<int> localAvoidanceAngleOffsetsRight = new()
-		{
-			 0, 64,  128,  192,
-			 256,  320,  384,
-			 448,  512,  576,
-			 640,  704,  768,
-			 832,  896,  960,
-			 1024
-		};
-
-#pragma warning restore SA1137 // Elements should have the same indentation*/
-
-		int currLocalAvoidanceAngleOffset = 0;
-		WVec pastMoveVec;
 
 		// LOS Checking interval
 		int tickCount = 0;
@@ -230,8 +203,6 @@ namespace OpenRA.Mods.Common.Activities
 				self.World.WorldActor.TraitsImplementing<ThetaStarPathfinderOverlay>().FirstEnabledTraitOrDefault().AddLine(renderLine, key);
 		}
 
-		const int LineThickness = 1;
-
 		public static void RenderLine(Actor self, WPos pos1, WPos pos2, string key)
 		{
 			var renderLine = new List<WPos>() { pos1, pos2 };
@@ -328,7 +299,6 @@ namespace OpenRA.Mods.Common.Activities
 		{
 			firstMove = true;
 			mobileOffGrid = self.Trait<MobileOffGrid>();
-			localAvoidanceDist = mobileOffGrid.UnitRadius * 2;
 			target = t;
 			this.targetLineColor = targetLineColor;
 			locomotor = self.World.WorldActor.TraitsImplementing<Locomotor>().FirstEnabledTraitOrDefault();
@@ -365,7 +335,6 @@ namespace OpenRA.Mods.Common.Activities
 		protected override void OnFirstRun(Actor self)
 		{
 			usePathFinder = true;
-			useLocalAvoidance = true;
 
 			thetaPFexecManager = self.World.WorldActor.TraitsImplementing<ThetaPathfinderExecutionManager>().FirstOrDefault();
 
@@ -583,7 +552,7 @@ namespace OpenRA.Mods.Common.Activities
 						//Console.WriteLine("Blocked and not last target!");
 						if (mobileOffGrid.PositionBuffer.Count >= 20) // 3 seconds
 						{
-							Console.WriteLine("Theta running a second time.");
+							//Console.WriteLine("Theta running a second time.");
 							if (thetaIters < maxThetaIters)
 							{
 								mobileOffGrid.CurrMovementState = MovementState.Repathing;
@@ -694,8 +663,6 @@ namespace OpenRA.Mods.Common.Activities
 
 		public void UpdateSeekVecWithLocalAvoidance(Actor self)
 		{
-			return;
-
 			// Cannot change seek vector if none exists
 			if (mobileOffGrid.SeekVectors.Count <= 0)
 				return;
