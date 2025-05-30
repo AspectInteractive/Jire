@@ -128,18 +128,6 @@ namespace OpenRA.Mods.Common.Traits
 			PlayerCirclesLocked = false;
 		}
 
-		WPos GetUnblockedWPos(Actor self, World world, WPos checkPos)
-		{
-			var checkCCPos = ThetaStarPathSearch.GetNearestUnblockedCCPos(world, self, locomotor, checkPos);
-			if (!ThetaStarPathSearch.CcinMap(checkCCPos, world) ||
-				ThetaStarPathSearch.IsCellBlocked(self, locomotor, world.Map.CellContaining(checkPos), BlockedByActor.Immovable))
-				checkCCPos = ThetaStarPathSearch.GetBestCandidateCCPos(self, world, locomotor, checkPos);
-			else
-				return checkPos;
-
-			return world.Map.WPosFromCCPos(checkCCPos);
-		}
-
 		public void RemovePF(Actor actor) { RemovePF(actor, WPos.Zero); }
 
 		public void RemovePF(Actor actor, WPos targetPos)
@@ -312,7 +300,8 @@ namespace OpenRA.Mods.Common.Traits
 							var firstActorOrder = actorOrdersInSliceGroup[0];
 							var avgSourcePosOfGroup = IEnumerableExtensions.Average(actorOrdersInSliceGroup
 																					   .Select(ao => ao.Actor.CenterPosition));
-							var thetaSourcePos = GetUnblockedWPos(firstActorOrder.Actor, world, avgSourcePosOfGroup);
+							var thetaSourcePos = world.Map.WPosFromCCPos(
+								ThetaStarPathSearch.GetNearestUnblockedCCPos(world, firstActorOrder.Actor, locomotor, avgSourcePosOfGroup, 100));
 							var newAvgThetaStarSearch = new ThetaStarPathSearch(firstActorOrder.Actor.World,
 																			 firstActorOrder.Actor, thetaSourcePos,
 																			 firstActorOrder.TargetPos);

@@ -667,53 +667,6 @@ namespace OpenRA.Mods.Common.Pathfinder
 			minState = startState;
 		}
 
-		public static CCPos GetBestCandidateCCPos(Actor self, World world, Locomotor locomotor, WPos destPos)
-		{
-			var destCCPos = GetNearestUnblockedCCPos(world, self, locomotor, destPos);
-			var newCellCandidates = new List<CCPos>();
-			List<CCPos> candidates;
-			var newCandidates = new List<CCPos>() { destCCPos };
-			while (newCellCandidates.Count == 0)
-			{
-				// Assign candidates to last set of new candidates and flush new candidates
-				candidates = newCandidates;
-				newCandidates = new List<CCPos>();
-				foreach (var c in candidates)
-				{
-					newCandidates = newCandidates.Union(new List<CCPos>()
-						{
-							new(c.X, c.Y - 1, c.Layer),
-							new(c.X - 1, c.Y - 1, c.Layer),
-							new(c.X + 1, c.Y - 1, c.Layer),
-							new(c.X, c.Y + 1, c.Layer),
-							new(c.X - 1, c.Y + 1, c.Layer),
-							new(c.X + 1, c.Y + 1, c.Layer),
-							new(c.X - 1, c.Y, c.Layer),
-							new(c.X + 1, c.Y, c.Layer)
-						}).ToList();
-				}
-
-				foreach (var nc in newCandidates)
-					if (GetUnblockedNeighbours(world, self, locomotor, nc).Count > 0)
-						newCellCandidates.Add(nc);
-			}
-
-			var distFromDest = int.MaxValue;
-			var bestCandidate = newCandidates[0];
-
-			foreach (var c in newCellCandidates)
-			{
-				var newDist = (destPos - world.Map.WPosFromCCPos(c)).HorizontalLength;
-				if (newDist < distFromDest)
-				{
-					distFromDest = newDist;
-					bestCandidate = c;
-				}
-			}
-
-			return bestCandidate;
-		}
-
 		public void UpdatePathIfFound()
 		{
 			if (goalState.Gval < int.MaxValue)
