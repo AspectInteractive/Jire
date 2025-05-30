@@ -35,14 +35,15 @@ namespace OpenRA.Mods.Common.Traits
 		List<(CCState, Color)> statesWithColors = new();
 		readonly List<string> enabledOverlays = new();
 		bool NoFiltering => enabledOverlays.Count == 0;
-		readonly List<(List<WPos> Path, Color? C)> paths = new();
+		readonly List<(Actor Unit, List<WPos> Path, Color? C)> paths = new();
 		readonly List<(List<WPos> Line, string Key)> lines = new();
 
 		public struct OverlayKeyStrings
 		{
 			public const string Path = "path";  // toggles the theta path
 			public const string HeatMap = "heatmap"; // toggles the theta path heat map
-			public const string Circles = "circles"; // toggles the circles and slices in the theta PF execution manager
+			public const string Circles = "circles"; // toggles the circles and slices in the theta PF execution 
+			public const string Test = "test"; // toggles the circles and slices in the theta PF execution manager
 		}
 
 		// Set this to true to display annotations showing the cost at each cell
@@ -65,6 +66,7 @@ namespace OpenRA.Mods.Common.Traits
 				OverlayKeyStrings.Path,
 				OverlayKeyStrings.HeatMap,
 				OverlayKeyStrings.Circles,
+				OverlayKeyStrings.Test,
 			};
 
 		public ThetaStarPathfinderOverlay()
@@ -99,12 +101,19 @@ namespace OpenRA.Mods.Common.Traits
 		{
 			if (Comms.Any(comm => comm.Name == name))
 			{
-				Enabled ^= true;
-				ToggleVisibility("");
-
-				// If the overlay does not exist and cannot be removed, then we add it
-				if (validChatCommandArgs.Any(validArg => arg == validArg) && !enabledOverlays.Remove(arg))
-					enabledOverlays.Add(arg);
+				// If an argument is passed, we always enable and then toggle the argument overlay
+				if (validChatCommandArgs.Any(validArg => arg == validArg))
+				{
+					Enabled = true;
+					// If the overlay does not exist and cannot be removed, then we add it
+					if (!enabledOverlays.Remove(arg))
+						enabledOverlays.Add(arg);
+				}
+				else // if no argument is passed, we toggle Theta
+				{
+					ToggleVisibility("");
+					Enabled ^= true;
+				}
 			}
 		}
 
@@ -180,11 +189,14 @@ namespace OpenRA.Mods.Common.Traits
 			lineColor = Color.FromAhsv(pathHue, currSat, currLight);
 			if (NoFiltering || enabledOverlays.Contains(OverlayKeyStrings.Path))
 			{
-				foreach (var (path, color) in paths)
+				foreach (var (unit, path, color) in paths)
 				{
-					var linesToRender = GetPathRenderableSet(path, lineThickness, color ?? lineColor, endPointRadius, endPointThickness, lineColor);
-					foreach (var line in linesToRender)
-						yield return line;
+					if (self.World.Selection.Contains(unit)) // Do not render the path if the unit is not selected
+					{
+						var linesToRender = GetPathRenderableSet(path, lineThickness, color ?? lineColor, endPointRadius, endPointThickness, lineColor);
+						foreach (var line in linesToRender)
+							yield return line;
+					}
 				}
 			}
 
@@ -253,7 +265,7 @@ namespace OpenRA.Mods.Common.Traits
 			UpdatePointColors();
 		}
 
-		public void AddPath(List<WPos> path, Color? color = null) { paths.Add((path, color)); }
+		public void AddPath(Actor unit, List<WPos> path, Color? color = null) { paths.Add((unit, path, color)); }
 		public void RemovePath(List<WPos> path)	{ paths.RemoveAll(p => p.Path == path); }
 		public void AddLine(List<WPos> line, string key) { lines.Add((line, key)); }
 		public void RemoveLine(List<WPos> line) { lines.RemoveAll(l => l.Line == line); }

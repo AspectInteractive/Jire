@@ -130,7 +130,7 @@ namespace OpenRA.Mods.Common.Traits
 
 		WPos GetUnblockedWPos(Actor self, World world, WPos checkPos)
 		{
-			var checkCCPos = ThetaStarPathSearch.GetNearestCCPos(world, checkPos);
+			var checkCCPos = ThetaStarPathSearch.GetNearestUnblockedCCPos(world, self, locomotor, checkPos);
 			if (!ThetaStarPathSearch.CcinMap(checkCCPos, world) ||
 				ThetaStarPathSearch.IsCellBlocked(self, locomotor, world.Map.CellContaining(checkPos), BlockedByActor.Immovable))
 				checkCCPos = ThetaStarPathSearch.GetBestCandidateCCPos(self, world, locomotor, checkPos);

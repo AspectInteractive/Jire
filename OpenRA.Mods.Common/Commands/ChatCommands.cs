@@ -54,6 +54,7 @@ namespace OpenRA.Mods.Common.Commands
 
 				if (commandList.Value != null)
 					foreach (var command in commandList.Value)
+
 						command.InvokeCommand(name.ToLowerInvariant(), message.Substring(1 + name.Length).Trim());
 				else
 					TextNotificationsManager.Debug(TranslationProvider.GetString(InvalidCommand, Translation.Arguments("name", name)));

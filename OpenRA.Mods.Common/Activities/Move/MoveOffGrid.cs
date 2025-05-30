@@ -534,7 +534,7 @@ namespace OpenRA.Mods.Common.Activities
 			if (pathFound && self.CurrentActivity is not ReturnToCellActivity)
 				UpdateSeekVecWithLocalAvoidance(self);
 
-			if (mobileOffGrid.PositionBuffer.Count >= 3)
+			if (mobileOffGrid.PositionBuffer.Count >= 10)
 			{
 				var lengthMoved = (mobileOffGrid.PositionBuffer.Last() - mobileOffGrid.PositionBuffer[0]).Length;
 				var deltaFirst = currPathTarget - mobileOffGrid.PositionBuffer[0];
@@ -561,6 +561,7 @@ namespace OpenRA.Mods.Common.Activities
 								mobileOffGrid.IsBlocked = false;
 								EndingActions();
 								Complete();
+								RenderCircleCollDebug(self, mobileOffGrid.CenterPosition, mobileOffGrid.UnitRadius);
 								thetaPFexecManager.AddMoveOrder(self, target.CenterPosition);
 								thetaPFexecManager.PlayerCirclesLocked = false;
 								thetaIters++;
@@ -585,7 +586,8 @@ namespace OpenRA.Mods.Common.Activities
 					mobileOffGrid.PositionBuffer.Clear();
 				}
 				// lengthMoved >= mobileOffGrid.MovementSpeed
-				//else
+				else
+					thetaIters = 0;
 				//	mobileOffGrid.PositionBuffer.Clear();
 			}
 
@@ -603,7 +605,10 @@ namespace OpenRA.Mods.Common.Activities
 				//pathRemaining.Count == 0 && // Enable this if you want line formation rather than grouped movement
 				Delta.Length < mobileOffGrid.GenFinalWVec().Length + maxGoalRange.Length;
 
-			var hasReachedGoal = selfHasReachedGoal || nearbyActorHasReachedGoal;
+			// We do not use nearbyActor logic if the next path position is not visible, as this will cause the unit to get stuck
+			var hasReachedGoal = selfHasReachedGoal ||
+				(pathRemaining.Count > 0 &&
+				IsPathObservable(self.World, self, locomotor, self.CenterPosition, pathRemaining[0], mobileOffGrid.UnitHitShape, true, 1) && nearbyActorHasReachedGoal);
 
 			if (hasReachedGoal)
 			{
