@@ -51,6 +51,28 @@ namespace OpenRA.Test
 				Is.EqualTo(0));
 		}
 
+		public struct CirclePathOverlapsWithSquareTestCase
+		{
+			public WPos SourceCenter;
+			public WPos DestCenter;
+			public WDist SelfCircleRadius;
+			public WPos OtherSquareTopLeft;
+			public WDist OtherSquareWidth;
+			public bool Overlaps;
+
+			public CirclePathOverlapsWithSquareTestCase(WPos sourceCenter, WPos destCenter, WDist selfCircleRadius, WPos otherSquareTopLeft, WDist otherSquareWidth,
+				bool overlaps)
+			{
+				SourceCenter = sourceCenter;
+				DestCenter = destCenter;
+				SelfCircleRadius = selfCircleRadius;
+				OtherSquareTopLeft = otherSquareTopLeft;
+				OtherSquareWidth = otherSquareWidth;
+				Overlaps = overlaps;
+			}
+		}
+
+
 		public struct CirclePathOverlapsWithCircleTestCase
 		{
 			public WPos SourceCenter;
@@ -301,6 +323,52 @@ namespace OpenRA.Test
 			}
 		}
 
+		[TestCase(TestName = "Circle path overlaps with a square (Cell)")]
+		public void CirclePathOverlapsWithCell()
+		{
+			// sourceCenter, destCenter, selfCircleRadius, otherSquareTopLeft, otherSquareWidth
+			var circleTestCases = new List<CirclePathOverlapsWithSquareTestCase>()
+			{
+				new(new WPos(0, 0, 0), new WPos(8486, -2353, 0), new WDist(1234), new WPos(4390, -3461, 0), new WDist(4000), true),
+				new(new WPos(8486, -2353, 0), new WPos(0, 0, 0), new WDist(1234), new WPos(4390, -3461, 0), new WDist(4000), true),
+				new(new WPos(0, 0, 0), new WPos(0, -6000, 0), new WDist(1234), new WPos(323, -3780, 0), new WDist(1234), true),
+				new(new WPos(0, -6000, 0), new WPos(0, 0, 0), new WDist(1234), new WPos(323, -3780, 0), new WDist(1234), true),
+				new(new WPos(0, -6000, 0), new WPos(0, 0, 0), new WDist(1234), new WPos(-1581, -4646, 0), new WDist(3200), true),
+				new(new WPos(0, 0, 0), new WPos(0, -6000, 0), new WDist(1234), new WPos(-1581, -4646, 0), new WDist(3200), true),
+				new(new WPos(0, -6000, 0), new WPos(0, 0, 0), new WDist(1234), new WPos(-1581, -4646, 0), new WDist(1234), true),
+				new(new WPos(0, 0, 0), new WPos(0, -6000, 0), new WDist(1234), new WPos(-1581, -4646, 0), new WDist(1234), true),
+				new(new WPos(8486, -2353, 0), new WPos(0, 0, 0), new WDist(1234), new WPos(4390, -3461, 0), new WDist(4000), true),
+				new(new WPos(13, -10547, 0), new WPos(-12, 1, 0), new WDist(1234), new WPos(-1064, 1842, 0), new WDist(4000), false),
+				new(new WPos(-12, 1, 0), new WPos(13, -10547, 0), new WDist(1234), new WPos(-1064, 1842, 0), new WDist(4000), false),
+				// Problematic test cases below
+				new(new WPos(13, -10547, 0), new WPos(-12, 1, 0), new WDist(1234), new WPos(2629, -774, 0), new WDist(4000), false),
+				new(new WPos(-12, 1, 0), new WPos(13, -10547, 0), new WDist(1234), new WPos(-2314, -8029, 0), new WDist(1234), true),
+				new(new WPos(13, -10547, 0), new WPos(-12, 1, 0), new WDist(1234), new WPos(3753, -546, 0), new WDist(1234), false),
+				new(new WPos(-12, 1, 0), new WPos(13, -10547, 0), new WDist(1234), new WPos(2041, 2551, 0), new WDist(1234), false),
+				new(new WPos(13, -10547, 0), new WPos(-12, 1, 0), new WDist(1234), new WPos(2041, 2551, 0), new WDist(1234), false),
+				new(new WPos(-12, 1, 0), new WPos(13, -10547, 0), new WDist(800), new WPos(2446, -4294, 0), new WDist(1600), false),
+				new(new WPos(13, -10547, 0), new WPos(-12, 1, 0), new WDist(800), new WPos(2446, -4294, 0), new WDist(1600), false),
+			};
+
+			bool PathCollision(CirclePathOverlapsWithSquareTestCase ctc)
+			{
+				shape = new CircleShape(ctc.SelfCircleRadius);
+				shape.Initialize();
+				Console.WriteLine($"SourceCenter: {ctc.SourceCenter}, DestCenter: {ctc.DestCenter}, SelfCircleRadius: {ctc.SelfCircleRadius}," +
+								  $"OtherSquareTopLeft: {ctc.OtherSquareTopLeft}, OtherSquareWidth: {ctc.OtherSquareWidth}");
+				return CircleShape.CheckOverlapSquare(ctc.SourceCenter, ctc.DestCenter, ctc.SelfCircleRadius, ctc.OtherSquareTopLeft, ctc.OtherSquareWidth);
+			}
+
+			var pathCollisions = new List<bool>();
+			foreach (var (ctc, index) in circleTestCases.Select((item, index) => (item, index)))
+			{
+				var collision = PathCollision(ctc);
+				pathCollisions.Add(collision);
+				Console.WriteLine($"Circle Square Path {index + 1} has overlap: {collision}, expected: {ctc.Overlaps} ");
+				Assert.That(collision == ctc.Overlaps);
+			}
+		}
+
 		[TestCase(TestName = "Circle path overlaps with another Circle")]
 		public void CirclePathOverlapsWithCircle()
 		{
@@ -329,7 +397,7 @@ namespace OpenRA.Test
 			{
 				var collision = PathCollision(ctc);
 				pathCollisions.Add(collision);
-				Console.WriteLine($"Circle Path {index + 1} has overlap: {ctc.Overlaps}, expected: {ctc.Overlaps} ");
+				Console.WriteLine($"Circle Circle Path {index + 1} has overlap: {collision}, expected: {ctc.Overlaps} ");
 				Assert.That(collision == ctc.Overlaps);
 			}
 		}

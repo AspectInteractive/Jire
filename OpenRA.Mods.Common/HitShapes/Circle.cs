@@ -13,10 +13,14 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
+using System.Numerics;
+using DiscordRPC;
 using OpenRA.Graphics;
 using OpenRA.Mods.Common.Graphics;
 using OpenRA.Mods.Common.Traits;
+using OpenRA.Mods.Common.Traits.BotModules.Squads;
 using OpenRA.Primitives;
+using static OpenRA.Mods.Common.Traits.MobileOffGridOverlay;
 
 #pragma warning disable SA1005 // Single line comments should begin with single space
 #pragma warning disable SA1515 // Single-line comment should be preceded by blank line
@@ -169,59 +173,328 @@ namespace OpenRA.Mods.Common.HitShapes
 
 		public static bool DoesCircleAlongLineCollideWithCircle(WPos lineStart, WPos lineEnd, WDist selfRadius, WPos otherCenter, WDist otherRadius)
 		{
+			// Calculate denominator first to check for division by zero
+			var denominator = (Fix64)((lineEnd.X - lineStart.X) * (lineEnd.X - lineStart.X) +
+									 (lineEnd.Y - lineStart.Y) * (lineEnd.Y - lineStart.Y));
+
+			// If denominator is zero, the start and end points are the same
+			// In this case, just check if the single point overlaps with the circle
+			if (denominator == Fix64.Zero)
+			{
+				var dx = otherCenter.X - lineStart.X;
+				var dy = otherCenter.Y - lineStart.Y;
+				var distanceSquared = (Fix64)(dx * dx + dy * dy);
+				var radiusSum = (Fix64)(selfRadius.Length + otherRadius.Length);
+				return distanceSquared <= radiusSum * radiusSum;
+			}
+
 			var t = Math.Max(0, Math.Min(1, (int)(
-												 ((Fix64)(otherCenter.X - lineStart.X) * (Fix64)(lineEnd.X - lineStart.X) +
-												 (Fix64)(otherCenter.Y - lineStart.Y) * (Fix64)(lineEnd.Y - lineStart.Y)) /
-												 (Fix64)((lineEnd.X - lineStart.X) * (lineEnd.X - lineStart.X) + (lineEnd.Y - lineStart.Y) * (lineEnd.Y - lineStart.Y)))));
+				((Fix64)(otherCenter.X - lineStart.X) * (Fix64)(lineEnd.X - lineStart.X) +
+				 (Fix64)(otherCenter.Y - lineStart.Y) * (Fix64)(lineEnd.Y - lineStart.Y)) /
+				denominator)));
+
 			var closestX = (Fix64)lineStart.X + (Fix64)t * (Fix64)(lineEnd.X - lineStart.X);
 			var closestY = (Fix64)lineStart.Y + (Fix64)t * (Fix64)(lineEnd.Y - lineStart.Y);
 			var closestDistance = Fix64.Sqrt(((Fix64)otherCenter.X - closestX) * ((Fix64)otherCenter.X - closestX) +
-											 ((Fix64)otherCenter.Y - closestY) * ((Fix64)otherCenter.Y - closestY));
+										   ((Fix64)otherCenter.Y - closestY) * ((Fix64)otherCenter.Y - closestY));
 
 			return (int)closestDistance <= selfRadius.Length + otherRadius.Length;
 		}
 
-		public static Fix64 ClosestDistance(WPos lineStart, WPos lineEnd, WPos otherCenter)
+		private static Fix64 ClosestDistance(WPos lineStart, WPos lineEnd, WPos point)
 		{
-			const int FractionalBits = 16;
+			var dx = lineEnd.X - lineStart.X;
+			var dy = lineEnd.Y - lineStart.Y;
 
-			var (x1, y1) = ((long)lineStart.X, (long)lineStart.Y);
-			var (x2, y2) = ((long)lineEnd.X, (long)lineEnd.Y);
-			var (xc, yc) = ((long)otherCenter.X, (long)otherCenter.Y);
+			if (dx == 0 && dy == 0)
+				return Fix64.Sqrt((Fix64)((point.X - lineStart.X) * (point.X - lineStart.X) +
+										 (point.Y - lineStart.Y) * (point.Y - lineStart.Y)));
 
-			var dx = x2 - x1;
-			var dy = y2 - y1;
+			var t = Fix64.Max(Fix64.Zero, Fix64.Min(Fix64.One,
+				((Fix64)(point.X - lineStart.X) * (Fix64)dx + (Fix64)(point.Y - lineStart.Y) * (Fix64)dy) /
+				(Fix64)(dx * dx + dy * dy)));
 
-			var lengthSquared = dx * dx + dy * dy;
+			var closestX = (Fix64)lineStart.X + t * (Fix64)dx;
+			var closestY = (Fix64)lineStart.Y + t * (Fix64)dy;
 
-			long closestX;
-			long closestY;
-
-			if (lengthSquared == 0)
-			{
-				// lineStart and lineEnd are the same point, so the closest point is lineStart
-				closestX = x1;
-				closestY = y1;
-			}
-			else
-			{
-				var dotProduct = (xc - x1) * dx + (yc - y1) * dy;
-				dotProduct = Math.Max(0, Math.Min(lengthSquared, dotProduct));
-
-				var t = (dotProduct << FractionalBits) / lengthSquared;
-				closestX = x1 + ((dx * t) >> FractionalBits);
-				closestY = y1 + ((dy * t) >> FractionalBits);
-
-				return Fix64.Sqrt((Fix64)((xc - closestX) * (xc - closestX) + (yc - closestY) * (yc - closestY)));
-			}
-
-			return Fix64.Sqrt((Fix64)((xc - closestX) * (xc - closestX) + (yc - closestY) * (yc - closestY)));
+			return Fix64.Sqrt((Fix64)((point.X - (int)closestX) * (point.X - (int)closestX) +
+									  (point.Y - (int)closestY) * (point.Y - (int)closestY)));
 		}
 
 		public static bool CheckOverlap(WPos lineStart, WPos lineEnd, WDist selfRadius, WPos otherCenter, WDist otherRadius)
 		{
 			var distance = ClosestDistance(lineStart, lineEnd, otherCenter);
 			return distance <= (Fix64)selfRadius.Length + (Fix64)otherRadius.Length;
+		}
+
+
+		public static bool CapsuleIntersectsSquare(WPos squareTopLeft, WDist squareWidth, WDist capsuleRadius, WPos startPos, WPos endPos)
+		{
+			static float Distance(WPos a, WPos b)
+			{
+				float dx = a.X - b.X;
+				float dy = a.Y - b.Y;
+				return (float)Math.Sqrt(dx * dx + dy * dy);
+			}
+
+			static WPos ClosestPointOnLineSegment(WPos lineStart, WPos lineEnd, WPos point)
+			{
+				static float Dot(WVec a, WVec b) => a.X * b.X + a.Y * b.Y;
+
+				var lineDirection = lineEnd - lineStart;
+				var lineLength = lineDirection.Length;
+				lineDirection /= lineLength;
+
+				var vector = point - lineStart;
+				var d = Dot(vector, lineDirection);
+
+				if (d <= 0)
+					return lineStart;
+				else if (d >= lineLength)
+					return lineEnd;
+				else
+					return lineStart + new WVec((int)(lineDirection.X * d), (int)(lineDirection.Y * d), 0);
+			}
+
+			static float DistanceFromLineSegment(WPos lineStart, WPos lineEnd, WPos point)
+			{
+				var closestPoint = ClosestPointOnLineSegment(lineStart, lineEnd, point);
+				return Distance(point, closestPoint);
+			}
+
+			static WPos ClosestPointOnRectangle(WPos lineStart, WPos lineEnd, WPos rectTopLeft, WPos rectBotRight)
+			{
+				var closestPoint = ClosestPointOnLineSegment(lineStart, lineEnd, rectTopLeft);
+				var closestDistance = Distance(closestPoint, ClosestPointOnLineSegment(lineStart, lineEnd, closestPoint));
+
+				// Check the top edge
+				var topEdgePoint = ClosestPointOnLineSegment(lineStart, lineEnd, ClosestPointOnLineSegment(rectTopLeft, new WPos(rectBotRight.X, rectTopLeft.Y, 0), lineStart));
+				var topEdgeDistance = Distance(topEdgePoint, ClosestPointOnLineSegment(lineStart, lineEnd, topEdgePoint));
+				if (topEdgeDistance < closestDistance)
+				{
+					closestPoint = topEdgePoint;
+					closestDistance = topEdgeDistance;
+				}
+
+				// Check the right edge
+				var rightEdgePoint = ClosestPointOnLineSegment(lineStart, lineEnd, ClosestPointOnLineSegment(new WPos(rectBotRight.X, rectTopLeft.Y, 0), rectBotRight, lineStart));
+				var rightEdgeDistance = Distance(rightEdgePoint, ClosestPointOnLineSegment(lineStart, lineEnd, rightEdgePoint));
+				if (rightEdgeDistance < closestDistance)
+				{
+					closestPoint = rightEdgePoint;
+					closestDistance = rightEdgeDistance;
+				}
+
+				// Check the bottom edge
+				var botEdgePoint = ClosestPointOnLineSegment(lineStart, lineEnd, ClosestPointOnLineSegment(rectBotRight, new WPos(rectTopLeft.X, rectBotRight.Y, 0), lineStart));
+				var botEdgeDistance = Distance(botEdgePoint, ClosestPointOnLineSegment(lineStart, lineEnd, botEdgePoint));
+				if (botEdgeDistance < closestDistance)
+				{
+					closestPoint = botEdgePoint;
+					closestDistance = botEdgeDistance;
+				}
+
+				// Check the left edge
+				var leftEdgePoint = ClosestPointOnLineSegment(lineStart, lineEnd, ClosestPointOnLineSegment(new WPos(rectTopLeft.X, rectBotRight.Y, 0), rectTopLeft, lineStart));
+				var leftEdgeDistance = Distance(leftEdgePoint, ClosestPointOnLineSegment(lineStart, lineEnd, leftEdgePoint));
+				if (leftEdgeDistance < closestDistance)
+				{
+					closestPoint = leftEdgePoint;
+					closestDistance = leftEdgeDistance;
+				}
+
+				return closestPoint;
+			}
+
+			var squareBotRight = new WPos(squareTopLeft.X + squareWidth.Length, squareTopLeft.Y + squareWidth.Length, 0);
+
+			// Calculate the closest point on the square to the capsule's line segment
+			var closestPoint = ClosestPointOnRectangle(startPos, endPos, squareTopLeft, squareBotRight);
+
+			// Calculate the distance between the closest point and the capsule's line segment
+			var distance = DistanceFromLineSegment(startPos, endPos, closestPoint);
+
+			// Check if the distance is less than or equal to the capsule's radius
+			return distance <= capsuleRadius.Length;
+		}
+
+		public static bool WillCircleCollideWithSquare(WPos selfPos, WDist selfRadius, WVec velocity, WPos squareTopLeft, WDist squareWidth)
+		{
+			// 1. Check if start position overlaps
+			if (IsCircleCollidingWithSquare(selfPos, selfRadius, squareTopLeft, squareWidth))
+				return true;
+
+			// 2. Calculate end position and check if it overlaps
+			var endPos = selfPos + velocity;
+			if (IsCircleCollidingWithSquare(endPos, selfRadius, squareTopLeft, squareWidth))
+				return true;
+
+			// 3. Get square corners
+			var squareRight = squareTopLeft.X + squareWidth.Length;
+			var squareBottom = squareTopLeft.Y + squareWidth.Length;
+			var corners = new[]
+			{
+				squareTopLeft,                                         // Top-left
+				new WPos(squareRight, squareTopLeft.Y, 0),           // Top-right
+				new WPos(squareRight, squareBottom, 0),              // Bottom-right
+				new WPos(squareTopLeft.X, squareBottom, 0),          // Bottom-left
+			};
+
+			// 4. Check each edge of the square
+			for (var i = 0; i < corners.Length; i++)
+			{
+				var start = corners[i];
+				var end = corners[(i + 1) % corners.Length];
+
+				// Use closest point approach to check if movement path comes close enough to edge
+				var closestDistance = ClosestDistance(selfPos, endPos, start);
+				if (closestDistance <= (Fix64)selfRadius.Length)
+					return true;
+
+				// Also check if the movement path crosses this edge
+				if (WPos.DoTwoLinesIntersect(selfPos, endPos, start, end))
+					return true;
+			}
+
+			// 5. Special case: check if movement path goes through square without touching edges
+			// This can happen if movement is fast enough to "tunnel" through
+			var movementDirection = endPos - selfPos;
+			var toSquareCenter = new WPos(squareTopLeft.X + squareWidth.Length / 2,
+										 squareTopLeft.Y + squareWidth.Length / 2, 0) - selfPos;
+
+			var projLength = (Fix64)(movementDirection.X * toSquareCenter.X + movementDirection.Y * toSquareCenter.Y) /
+							(Fix64)(movementDirection.X * movementDirection.X + movementDirection.Y * movementDirection.Y);
+
+			if (projLength > Fix64.Zero && projLength < Fix64.One)
+			{
+				var closestPoint = selfPos + new WVec(
+					(int)(movementDirection.X * (int)projLength),
+					(int)(movementDirection.Y * (int)projLength),
+					0);
+
+				if (IsCircleCollidingWithSquare(closestPoint, selfRadius, squareTopLeft, squareWidth))
+					return true;
+			}
+
+			return false;
+		}
+
+		///// <summary>
+		///// Detects if a moving circle will collide with a static square
+		///// </summary>
+		///// <param name="circle">The circle at starting position</param>
+		///// <param name="velocity">Movement vector of the circle (only X,Y used)</param>
+		///// <param name="square">The static square defined by top-left corner and width</param>
+		///// <param name="collisionTime">Time of collision (0-1 range, where 1 = end of movement)</param>
+		///// <param name="collisionPoint">Point where collision occurs</param>
+		///// <returns>True if collision will occur during movement</returns>
+		//public static bool WillCircleCollideWithSquare(WPos selfPos, WDist selfRadius, WVec velocity, WPos squareTopLeft, WDist squareWidth)
+		//	//, out Fix64 collisionTime, out WPos collisionPoint)
+		//{
+		//	var squareLeft = squareTopLeft.X;
+		//	var squareRight = squareTopLeft.X + squareWidth.Length;
+		//	var squareTop = squareTopLeft.Y;
+		//	var squareBottom = squareTopLeft.Y + squareWidth.Length;
+
+		//	//collisionTime = Fix64.MaxValue;
+		//	//collisionPoint = WPos.Zero;
+
+		//	// Early exit if circle is stationary
+		//	var velocityLengthSq = (Fix64)(velocity.X * velocity.X + velocity.Y * velocity.Y);
+		//	if (velocityLengthSq < Fix64.FromRaw(655)) // Very small threshold in fixed point
+		//		return IsCircleCollidingWithSquare(selfPos, selfRadius, squareTopLeft, squareWidth);
+
+		//	// Expand square by circle radius to treat circle as a point
+		//	var eSquareTopLeft = new WPos(squareLeft - selfRadius.Length, squareTop - selfRadius.Length, 0);
+		//	var eSquareWidth = new WDist(squareWidth.Length + 2 * selfRadius.Length);
+
+		//	// Check if ray intersects with expanded square
+		//	if (!RayIntersectsRectangle(selfPos, velocity, eSquareTopLeft, eSquareWidth, out Fix64 t))
+		//		return false;
+
+		//	// If intersection time is beyond our movement (t > 1), no collision
+		//	if (t > Fix64.One || t < Fix64.Zero)
+		//		return false;
+
+		//	// Calculate the actual collision point and details
+		//	var futureCirclePos = new WPos(
+		//		selfPos.X + velocity.X * (int)t,
+		//		selfPos.Y + velocity.Y * (int)t,
+		//		0);
+
+		//	// Check if it's a corner collision (more complex case)
+		//	if (IsCornerCollision(futureCirclePos, squareTopLeft, squareWidth))
+		//	{
+		//		// Recalculate for precise corner collision
+		//		if (CalculateCornerCollision(selfPos, selfRadius, velocity, squareTopLeft, squareWidth, out Fix64 cornerTime, out WPos cornerPoint) &&
+		//			cornerTime >= Fix64.Zero && cornerTime <= Fix64.One)
+		//		{
+		//			//collisionTime = cornerTime;
+		//			//collisionPoint = cornerPoint;
+		//			return true;
+		//		}
+		//	}
+
+		//	//collisionTime = t;
+		//	//collisionPoint = futureCirclePos;
+		//	return true;
+		//}
+
+		/// <summary>
+		/// Checks if circle is currently colliding with square
+		/// </summary>
+		public static bool IsCircleCollidingWithSquare(WPos circlePos, WDist circleRadius, WPos squareTopLeft, WDist squareWidth)
+		{
+			var squareLeft = squareTopLeft.X;
+			var squareRight = squareTopLeft.X + squareWidth.Length;
+			var squareTop = squareTopLeft.Y;
+			var squareBottom = squareTopLeft.Y + squareWidth.Length;
+
+			// Find closest point on square to circle center
+			var closestX = Fix64.Max((Fix64)squareLeft, Fix64.Min((Fix64)circlePos.X, (Fix64)squareRight));
+			var closestY = Fix64.Max((Fix64)squareTop, Fix64.Min((Fix64)circlePos.Y, (Fix64)squareBottom));
+
+			// Check if distance is less than radius
+			var distanceX = (Fix64)circlePos.X - closestX;
+			var distanceY = (Fix64)circlePos.Y - closestY;
+			var distanceSquared = distanceX * distanceX + distanceY * distanceY;
+
+			return distanceSquared <= (Fix64)circleRadius.Length * (Fix64)circleRadius.Length;
+		}
+
+		public static bool CheckOverlapSquare(WPos startPos, WPos endPos, WDist selfRadius, WPos squareTopLeft, WDist squareWidth)
+		{
+			// 1. Check if either start or end position overlaps with the square
+			if (IsCircleCollidingWithSquare(startPos, selfRadius, squareTopLeft, squareWidth) ||
+				IsCircleCollidingWithSquare(endPos, selfRadius, squareTopLeft, squareWidth))
+				return true;
+
+			// 2. Get the four corners of the square
+			var squarePoints = new[]
+			{
+				squareTopLeft, // Top-left
+				new WPos(squareTopLeft.X + squareWidth.Length, squareTopLeft.Y, 0), // Top-right
+				new WPos(squareTopLeft.X + squareWidth.Length, squareTopLeft.Y + squareWidth.Length, 0), // Bottom-right
+				new WPos(squareTopLeft.X, squareTopLeft.Y + squareWidth.Length, 0) // Bottom-left
+			};
+
+			// 3. Check if the movement path intersects any of the square edges
+			for (var i = 0; i < squarePoints.Length; i++)
+			{
+				var p1 = squarePoints[i];
+				var p2 = squarePoints[(i + 1) % squarePoints.Length];
+
+				// Use the existing line collision check
+				if (CheckOverlap(startPos, endPos, selfRadius, p1, new WDist(1)) ||
+					DoesCircleAlongLineCollideWithCircle(startPos, endPos, selfRadius, p1, new WDist(1)))
+					return true;
+
+				// Check if movement path intersects square edge
+				if (WPos.DoTwoLinesIntersect(startPos, endPos, p1, p2))
+					return true;
+			}
+
+			return false;
 		}
 
 		static List<WPos?> CircleCircleIntersections(Fix64 x1, Fix64 y1, Fix64 r1, Fix64 x2, Fix64 y2, Fix64 r2)
@@ -246,34 +519,6 @@ namespace OpenRA.Mods.Common.HitShapes
 			var xs2 = xm - h * dy / d;
 			var ys1 = ym - h * dx / d;
 			var ys2 = ym + h * dx / d;
-
-			intersections.Add(new WPos((int)xs1, (int)ys1, 0));
-			intersections.Add(new WPos((int)xs2, (int)ys2, 0));
-
-			return intersections;
-		}
-
-		static List<WPos?> CircleCircleIntersections_Old(Fix64 x1, Fix64 y1, Fix64 r1, Fix64 x2, Fix64 y2, Fix64 r2)
-		{
-			var intersections = new List<WPos?>();
-
-			var d = Fix64.Sqrt(Fix64.Pow(x2 - x1, (Fix64)2) + Fix64.Pow(y2 - y1, (Fix64)2));
-
-			if (d >= r1 + r2)
-			{
-				intersections.Add(null);
-				intersections.Add(null);
-				return intersections;
-			}
-
-			var a = (Fix64.Pow(r1, (Fix64)2) - Fix64.Pow(r2, (Fix64)2) + Fix64.Pow(d, (Fix64)2)) / ((Fix64)2 * d);
-			var h = Fix64.Sqrt(Fix64.Pow(r1, (Fix64)2) - Fix64.Pow(a, (Fix64)2));
-			var xm = x1 + a * (x2 - x1) / d;
-			var ym = y1 + a * (y2 - y1) / d;
-			var xs1 = xm + h * (y2 - y1) / d;
-			var xs2 = xm - h * (y2 - y1) / d;
-			var ys1 = ym - h * (x2 - x1) / d;
-			var ys2 = ym + h * (x2 - x1) / d;
 
 			intersections.Add(new WPos((int)xs1, (int)ys1, 0));
 			intersections.Add(new WPos((int)xs2, (int)ys2, 0));

@@ -863,11 +863,10 @@ namespace OpenRA.Mods.Common.Pathfinder
 		}
 
 		// Bresenham Line Algorithmng box of cells for a given line (WPos -> Wpos) https://en.wikipedia.org/wiki/Bresenham%27s_line_algorithm
-		public HashSet<CPos> GetAllCellsUnderneathALine(WPos a0, WPos a1) { return GetAllCellsUnderneathALine(thisWorld, a0, a1); }
+		public List<CPos> GetAllCellsUnderneathALine(WPos a0, WPos a1) { return GetAllCellsUnderneathALine(thisWorld, a0, a1); }
 
-		public static HashSet<CPos> GetAllCellsUnderneathALine(World world, WPos a0, WPos a1, int neighboursToCount = 0)
+		public static List<CPos> GetAllCellsUnderneathALine(World world, WPos a0, WPos a1, int neighboursToCount = 0)
 		{
-			var cellList = new HashSet<CPos>();
 			var ca0 = world.Map.CellContaining(a0);
 			var ca1 = world.Map.CellContaining(a1);
 			var x0 = ca0.X;
@@ -880,16 +879,34 @@ namespace OpenRA.Mods.Common.Pathfinder
 			var sy = y0 < y1 ? 1 : -1;
 			var err = dx + dy;
 
+			// Use List for speed, only use HashSet if neighboursToCount > 0
+			var result = neighboursToCount > 0 ? null : new List<CPos>(Math.Max(dx, -dy) + 1);
+			var resultSet = neighboursToCount > 0 ? new HashSet<CPos>() : null;
+
+			int minX = 0, minY = 0, maxX = world.Map.MapSize.X - 1, maxY = world.Map.MapSize.Y - 1;
+
+			void AddCell(int x, int y)
+			{
+				if (x < minX || x > maxX || y < minY || y > maxY)
+					return;
+
+				var cp = new CPos(x, y);
+				if (neighboursToCount > 0)
+				{
+					// Add self and neighbours
+					for (var nx = Math.Max(x - neighboursToCount, minX); nx <= Math.Min(x + neighboursToCount, maxX); nx++)
+						for (var ny = Math.Max(y - neighboursToCount, minY); ny <= Math.Min(y + neighboursToCount, maxY); ny++)
+							resultSet.Add(new CPos(nx, ny));
+				}
+				else
+				{
+					result.Add(cp);
+				}
+			}
+
 			while (true)
 			{
-				if (x0 >= 0 && x0 < world.Map.MapSize.X && y0 >= 0 && y0 < world.Map.MapSize.Y)
-				{
-					var newCPos = new CPos(x0, y0);
-					if (neighboursToCount > 0)
-						AddSelfAndNeighboursOfCPosToList(world, newCPos, ref cellList, neighboursToCount);
-					else
-						cellList.Add(newCPos);
-				}
+				AddCell(x0, y0);
 
 				if (x0 == x1 && y0 == y1)
 					break;
@@ -907,30 +924,17 @@ namespace OpenRA.Mods.Common.Pathfinder
 				}
 			}
 
-			return cellList;
+			if (neighboursToCount > 0)
+				return resultSet.ToList();
+			else
+				return result;
 		}
 
-		public static void AddSelfAndNeighboursOfCPosToList(World world, CPos cp, ref HashSet<CPos> inputCellList, int neighboursToCount = 1)
-		{
-			var minX = Math.Max(cp.X - neighboursToCount, 0);
-			var minY = Math.Max(cp.Y - neighboursToCount, 0);
-			var maxX = Math.Min(cp.X + neighboursToCount, world.Map.MapSize.X - 1);
-			var maxY = Math.Min(cp.Y + neighboursToCount, world.Map.MapSize.Y - 1);
-
-			for (var x = minX; x <= maxX; x++)
-			{
-				for (var y = minY; y <= maxY; y++)
-				{
-					inputCellList.Add(new CPos(x, y));
-				}
-			}
-		}
-
-		public bool AreCellsIntersectingPath(HashSet<CPos> cells, WPos sourcePos, WPos destPos)
+		public bool AreCellsIntersectingPath(List<CPos> cells, WPos sourcePos, WPos destPos)
 		{ return AreCellsIntersectingPath(thisWorld, self, locomotor, cells, sourcePos, destPos); }
 
 		public static bool AreCellsIntersectingPath(World world, Actor self, Locomotor locomotor,
-													HashSet<CPos> cells, WPos sourcePos, WPos destPos)
+													List<CPos> cells, WPos sourcePos, WPos destPos)
 		{
 			foreach (var cell in cells)
 			{
@@ -1076,7 +1080,7 @@ namespace OpenRA.Mods.Common.Pathfinder
 		{
 			if (cell == null)
 				return true; // All invalid cells are blocked
-			return MobileOffGrid.CellIsBlocked(self, locomotor, (CPos)cell, check);
+			return CellIsBlockedCache(self, locomotor, (CPos)cell, check);
 		}
 
 		bool CellSurroundingCCPosIsBlocked(CCPos ccPos, CellSurroundingCorner cellSurroundingCorner, BlockedByActor check = BlockedByActor.Immovable)

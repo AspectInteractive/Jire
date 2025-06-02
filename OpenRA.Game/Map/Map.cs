@@ -10,6 +10,7 @@
 #endregion
 
 using System;
+using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.Collections.Immutable;
 using System.IO;
@@ -256,6 +257,26 @@ namespace OpenRA
 		CellLayer<List<MPos>> inverseCellProjection;
 		CellLayer<byte> projectedHeight;
 		Rectangle projectionSafeBounds;
+
+		// Add this field to your Map class
+		public readonly ConcurrentDictionary<CPos, bool> CellBlockedCache = new();
+
+		/// <summary>
+		/// Clears the entire cell-blocked cache. Call this when the map changes (e.g. building placed/destroyed).
+		/// </summary>
+		public void InvalidateCellBlockedCache()
+		{
+			CellBlockedCache.Clear();
+		}
+
+		/// <summary>
+		/// Optionally, invalidate a single cell if you know which one changed.
+		/// </summary>
+		public void InvalidateCellBlockedCache(CPos cell)
+		{
+			CellBlockedCache.TryRemove(cell, out _);
+		}
+
 
 		public static string ComputeUID(IReadOnlyPackage package)
 		{

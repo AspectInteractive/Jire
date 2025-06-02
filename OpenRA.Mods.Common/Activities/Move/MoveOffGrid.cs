@@ -63,6 +63,8 @@ namespace OpenRA.Mods.Common.Activities
 
 		ThetaPathfinderExecutionManager thetaPFexecManager;
 		public List<TraitPair<MobileOffGrid>> ActorsSharingMove = new();
+		int cacheTickCount = 0;
+		List<TraitPair<MobileOffGrid>> cachedNearbyActors = null;
 		bool pathFound = false;
 		List<WPos> pathRemaining = new();
 		WPos currPathTarget;
@@ -171,6 +173,8 @@ namespace OpenRA.Mods.Common.Activities
 		public void ResetVariables()
 		{
 			pathRemaining.Clear();
+			cachedNearbyActors = null;
+			cacheTickCount = 0;
 			currPathTarget = WPos.Zero;
 			mobileOffGrid.CurrPathTarget = WPos.Zero;
 			lastPathTarget = WPos.Zero;
@@ -492,7 +496,6 @@ namespace OpenRA.Mods.Common.Activities
 				return false;
 			}
 
-			var nearbyActorsSharingMove = GetNearbyActorsSharingMove(self, false);
 			var dat = self.World.Map.DistanceAboveTerrain(mobileOffGrid.CenterPosition);
 			var pos = mobileOffGrid.GetPosition();
 
@@ -577,18 +580,9 @@ namespace OpenRA.Mods.Common.Activities
 						}
 					}
 				}
-				else if (nearbyActorsSharingMove.Count <= 1 && deltaLast.LengthSquared + 512 * 512 > deltaFirst.LengthSquared)
-				{
-					mobileOffGrid.CurrMovementState = MovementState.FailedStuck;
-					EndingActions();
-					if (mobileOffGrid.PositionBuffer.Count >= 20 && self.CurrentActivity is not ReturnToCellActivity)
-						Complete();
-					mobileOffGrid.PositionBuffer.Clear();
-				}
 				// lengthMoved >= mobileOffGrid.MovementSpeed
 				else
 					thetaIters = 0;
-				//	mobileOffGrid.PositionBuffer.Clear();
 			}
 
 			// Since units are more spread out during movement, 
@@ -606,9 +600,11 @@ namespace OpenRA.Mods.Common.Activities
 				Delta.Length < mobileOffGrid.GenFinalWVec().Length + maxGoalRange.Length;
 
 			// We do not use nearbyActor logic if the next path position is not visible, as this will cause the unit to get stuck
-			var hasReachedGoal = selfHasReachedGoal ||
-				(pathRemaining.Count > 0 &&
-				IsPathObservable(self.World, self, locomotor, self.CenterPosition, pathRemaining[0], mobileOffGrid.UnitHitShape, true, 1) && nearbyActorHasReachedGoal);
+			var hasReachedGoal = selfHasReachedGoal
+				||
+				(nearbyActorHasReachedGoal && pathRemaining.Count > 0 &&
+				IsPathObservable(self.World, self, locomotor, self.CenterPosition, pathRemaining[0], mobileOffGrid.UnitHitShape, true, 1))
+				;
 
 			if (hasReachedGoal)
 			{
@@ -668,6 +664,8 @@ namespace OpenRA.Mods.Common.Activities
 
 		public void UpdateSeekVecWithLocalAvoidance(Actor self)
 		{
+			return;
+
 			// Cannot change seek vector if none exists
 			if (mobileOffGrid.SeekVectors.Count <= 0)
 				return;
@@ -802,9 +800,31 @@ namespace OpenRA.Mods.Common.Activities
 
 		public List<TraitPair<MobileOffGrid>> GetNearbyActorsSharingMove(Actor self, bool excludeSelf = true)
 		{
-			var nearbyActors = self.World.FindActorsInCircle(mobileOffGrid.CenterPosition, MaxRangeToTarget());
-			return ActorsSharingMove.Where(a => nearbyActors.Contains(a.Actor) && !a.Actor.IsDead && (a.Actor != self || !excludeSelf)
-				&& a.Actor.Owner == self.Owner && a.Actor.CurrentActivity is not ReturnToCellActivity).ToList();
+			// Only update cache every N ticks since positions don't change that rapidly
+			if (cachedNearbyActors != null && cacheTickCount-- > 0)
+				return cachedNearbyActors;
+
+			cacheTickCount = 2; // Cache for 2 ticks
+
+			var result = new List<TraitPair<MobileOffGrid>>(ActorsSharingMove.Count);
+
+			var maxRange = MaxRangeToTarget();
+
+			foreach (var actorTrait in ActorsSharingMove)
+			{
+				var actor = actorTrait.Actor;
+				if (((mobileOffGrid.CenterPosition - actorTrait.Trait.CenterPosition).Length > maxRange.Length) ||
+					actor.IsDead ||
+					(actor == self && excludeSelf) ||
+					actor.Owner != self.Owner ||
+					actor.CurrentActivity is ReturnToCellActivity)
+					continue;
+
+				result.Add(actorTrait);
+			}
+
+			cachedNearbyActors = result;
+			return result;
 		}
 
 		public List<WPos> CompletedTargetsOfActors(List<TraitPair<MobileOffGrid>> actorList)

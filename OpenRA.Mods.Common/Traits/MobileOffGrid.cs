@@ -645,18 +645,7 @@ namespace OpenRA.Mods.Common.Traits
 
 							// Create hypothetical movement using flee vector to test if intersecting
 							var proposedWVec = GenFinalWVec(SeekVectors, FleeVectors.Union(new List<MvVec>() { repulsionMvVec }).ToList());
-							var intersectingEdges = GetIntersectingEdges(self.CenterPosition, proposedWVec, 1, Locomotor);
-							if (intersectingEdges.Count == 0)
-								FleeVectors.Add(repulsionMvVec);
-							else
-							{
-								// Remove any X or Y movement that causes the repulsion to intersect with an edge of a cell
-								var repulsionVector = repulsionMvVec.Vec;
-								foreach (var edge in intersectingEdges)
-									repulsionVector = RemoveVecOfIntersectingEdge(edge, repulsionVector);
-								if (repulsionVector.X != 0 || repulsionVector.Y != 0) // do not add flee vectors that have both X and Y as 0
-									FleeVectors.Add(new MvVec(repulsionVector, 1));
-							}
+							FleeVectors.Add(repulsionMvVec);
 						}
 					}
 				}
@@ -715,58 +704,52 @@ namespace OpenRA.Mods.Common.Traits
 
 		public void AddCellCollisionFleeVectors()
 		{
-			List<CPos> CellsCollidingWithActor(Actor self, WVec move, int lookAhead, Locomotor locomotor,
+			HashSet<CPos> CellsCollidingWithActor(Actor self, WPos dest, Locomotor locomotor,
 											bool incOrigin = false, int skipLookAheadAmt = 0)
-				=> CellsCollidingWithPos(self, self.CenterPosition, move, lookAhead, locomotor, incOrigin, skipLookAheadAmt);
+				=> CellsCollidingWithPos(self, self.CenterPosition, dest, locomotor, incOrigin, skipLookAheadAmt);
 
-			List<CPos> CellsCollidingWithPos(Actor self, WPos selfPos, WVec move, int lookAhead, Locomotor locomotor,
+			HashSet<CPos> CellsCollidingWithPos(Actor self, WPos startPos, WPos destPos, Locomotor locomotor,
 												bool incOrigin = false, int skipLookAheadAmt = 0)
 			{
-				var cellsColliding = new List<CPos>();
-				var selfCenterPos = selfPos.XYToInt2();
-				var selfCenterPosWithMoves = new List<int2>();
-				var startI = skipLookAheadAmt == 0 ? 0 : skipLookAheadAmt - 1;
-				// for each actor we are potentially colliding with
-				var selfShapes = self.TraitsImplementing<HitShape>().Where(Exts.IsTraitEnabled);
-				foreach (var selfShape in selfShapes)
+				// We get the unit radius * 2 (diameter) as a ratio to the cell's length, so that we can add this amount of cell neighbours to the line.
+				var unitRadiusToCellAmount = Fix64.Ceiling((Fix64)UnitRadius.Length * (Fix64)2 / (Fix64)1024);
+				var cellsToCheck = ThetaStarPathSearch.GetAllCellsUnderneathALine(self.World, startPos, destPos, (int)unitRadiusToCellAmount);
+
+				var cellsColliding = new HashSet<CPos>();
+				foreach (var cell in cellsToCheck)
 				{
-					var hitShapeCorners = selfShape.Info.Type.GetCorners(selfCenterPos);
-					foreach (var corner in hitShapeCorners)
-					{
-						var cell = self.World.Map.CellContaining(corner);
-						for (var i = startI; i < lookAhead; i++)
-						{
-							var cellToTest = self.World.Map.CellContaining(corner + move * i);
-							if (CellIsBlocked(self, locomotor, cellToTest, BlockedByActor.Immovable) && !cellsColliding.Contains(cellToTest))
-								cellsColliding.Add(cellToTest);
-						}
-						if (incOrigin && CellIsBlocked(self, locomotor, cell, BlockedByActor.Immovable) && !cellsColliding.Contains(cell))
-							cellsColliding.Add(cell);
-					}
+					var squareTopLeft = self.World.Map.TopLeftOfCell(cell);
+					var squareWidth = new WDist(1024);
+
+					if (CircleShape.CheckOverlapSquare(startPos, destPos, UnitRadius, squareTopLeft, squareWidth) &&
+						CellIsBlockedCache(self, locomotor, cell, BlockedByActor.Immovable))
+						cellsColliding.Add(cell);
 				}
+
 				return cellsColliding;
 			}
 
-			WVec RepulsionVecFunc(WPos selfPos, WPos cellPos)
+			var cellsCollidingSet = CellsCollidingWithActor(self, self.CenterPosition + GenFinalWVec(), Locomotor);
+
+			// Update BlockedByCells only if there are any colliding cells
+			if (cellsCollidingSet.Count > 0)
+				BlockedByCells = DirectionOfCellsBlockingPos(self, CenterPosition, cellsCollidingSet.ToList());
+			else
+				BlockedByCells = new List<BlockedByCell>();
+
+			// Pre-allocate flee vector list
+			var fleeVecToUse = new List<MvVec>(cellsCollidingSet.Count);
+
+			foreach (var c in cellsCollidingSet)
 			{
-				var repulsionDelta = cellPos - selfPos;
+				var cellCenter = self.World.Map.CenterOfCell(c);
+				var repulsionDelta = cellCenter - CenterPosition;
 				var distToMove = Math.Min(repulsionDelta.Length, MovementSpeed);
-				return -new WVec(new WDist(distToMove), WRot.FromYaw(repulsionDelta.Yaw));
+				var fleeVec = -new WVec(new WDist(distToMove), WRot.FromYaw(repulsionDelta.Yaw));
+				fleeVecToUse.Add(new MvVec(fleeVec, 1));
 			}
 
-			// Check collision with walls
-			var cellsCollidingSet = new List<CPos>();
-			cellsCollidingSet.AddRange(CellsCollidingWithActor(self, GenFinalWVec(), 3, Locomotor));
-			cellsCollidingSet.AddRange(CellsCollidingWithActor(self, GenFinalWVec(), 2, Locomotor));
-			cellsCollidingSet.AddRange(CellsCollidingWithActor(self, GenFinalWVec(), 1, Locomotor));
-
-			// Used by MobileOffGrid to suppress movement in the direction that the unit is being blocked
-			BlockedByCells = DirectionOfCellsBlockingPos(self, CenterPosition, cellsCollidingSet);
-
-			var fleeVecToUse = cellsCollidingSet.Distinct().Select(c => self.World.Map.CenterOfCell(c))
-														   .Select(wp => RepulsionVecFunc(CenterPosition, wp)).ToList();
-
-			FleeVectors.AddRange(fleeVecToUse.ConvertAll(v => new MvVec(v, 1)));
+			FleeVectors.AddRange(fleeVecToUse);
 		}
 
 		public void MobileOffGridMoveTick(Actor self)
@@ -860,6 +843,19 @@ namespace OpenRA.Mods.Common.Traits
 				CellBlockedByBuilding(self, cell) || !CPosinMap(self, cell);
 		}
 
+		// Returns whether the cell is blocked, using the cache if available.
+		public static bool CellIsBlockedCache(Actor self, Locomotor locomotor, CPos cell, BlockedByActor check = BlockedByActor.Immovable)
+		{
+			if (self.World.Map.CellBlockedCache.TryGetValue(cell, out var blocked))
+				return blocked;
+
+			// Call the expensive check only if not cached
+			blocked = CellIsBlocked(self, locomotor, cell, check);
+			self.World.Map.CellBlockedCache[cell] = blocked;
+			Game.RunAfterTick(() => self.World.Map.InvalidateCellBlockedCache(cell)); // Status should only be preserved for a single tick
+			return blocked;
+		}
+
 		public static bool CellBlockedByBuilding(Actor self, CPos cell)
 		{
 			foreach (var otherActor in self.World.ActorMap.GetActorsAt(cell))
@@ -909,7 +905,7 @@ namespace OpenRA.Mods.Common.Traits
 				var cellsToCheck = ThetaStarPathSearch.GetAllCellsUnderneathALine(self.World, source, dest, neighboursToCount);
 				foreach (var cell in cellsToCheck)
 				{
-					if (CellIsBlocked(self, locomotor, cell, check) && !cellsColliding.Contains(cell))
+					if (CellIsBlockedCache(self, locomotor, cell, check) && !cellsColliding.Contains(cell))
 					{
 						cellsColliding.Add(cell);
 						yield return cell;
@@ -923,24 +919,6 @@ namespace OpenRA.Mods.Common.Traits
 			return actor.TraitsImplementing<Building>().Any() ||
 				   actor.TraitsImplementing<Mobile>().Any() ||
 				   actor.TraitsImplementing<MobileOffGrid>().Any();
-		}
-
-		// Only used for detecting collisions for the purpose of slices in the ThetaPF Exec Manager
-		public List<Map.CellEdge> GetIntersectingEdges(WPos checkPos, WVec move, int lookAhead, Locomotor locomotor)
-		{
-			var intersectingEdges = new List<Map.CellEdge>();
-
-			// Ray cast to cell collisions
-			foreach (var (source, dest) in GenSDPairs(checkPos, move * lookAhead, UnitHitShape))
-			{
-				var cellsToCheck = ThetaStarPathSearch.GetAllCellsUnderneathALine(self.World, source, dest);
-				foreach (var cell in cellsToCheck)
-					if (CellIsBlocked(self, locomotor, cell))
-						intersectingEdges = intersectingEdges.Union(self.World.Map.CellEdgesThatIntersectWithLine(cell, source, dest))
-														.ToList();
-			}
-
-			return intersectingEdges;
 		}
 
 		// Only used for detecting collisions for the purpose of slices in the ThetaPF Exec Manager
