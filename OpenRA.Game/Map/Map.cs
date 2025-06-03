@@ -277,7 +277,6 @@ namespace OpenRA
 			CellBlockedCache.TryRemove(cell, out _);
 		}
 
-
 		public static string ComputeUID(IReadOnlyPackage package)
 		{
 			return ComputeUID(package, GetMapFormat(package));

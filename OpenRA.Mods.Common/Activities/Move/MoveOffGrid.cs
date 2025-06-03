@@ -585,7 +585,7 @@ namespace OpenRA.Mods.Common.Activities
 					thetaIters = 0;
 			}
 
-			// Since units are more spread out during movement, 
+			// Since units are more spread out during movement
 			var ratio = 0.5;
 			if (currPathTarget == FinalPathTarget)
 				ratio = 1.0;
@@ -594,17 +594,38 @@ namespace OpenRA.Mods.Common.Activities
 			var selfHasReachedGoal = Delta.HorizontalLengthSquared < mobileOffGrid.UnitRadius.LengthSquared;
 			var completedTargsOfNearbyActors = CompletedTargetsOfActors(GetNearbyActorsSharingMove(self));
 			tickCount = tickCount >= maxTicksBeforeLOScheck ? tickCount = 0 : tickCount + 1;
-			var nearbyActorHasReachedGoal = tickCount == 0 &&
-				completedTargsOfNearbyActors.Contains(currPathTarget) &&
-				//pathRemaining.Count == 0 && // Enable this if you want line formation rather than grouped movement
-				Delta.Length < mobileOffGrid.GenFinalWVec().Length + maxGoalRange.Length;
 
-			// We do not use nearbyActor logic if the next path position is not visible, as this will cause the unit to get stuck
-			var hasReachedGoal = selfHasReachedGoal
-				||
-				(nearbyActorHasReachedGoal && pathRemaining.Count > 0 &&
-				IsPathObservable(self.World, self, locomotor, self.CenterPosition, pathRemaining[0], mobileOffGrid.UnitHitShape, true, 1))
-				;
+			var hasReachedGoal = false;
+
+			// Check if unit has reached its immediate goal
+			if (selfHasReachedGoal)
+				hasReachedGoal = true;
+			// Check if nearby actor has reached the goal, but only on certain ticks due to the expense of this operation
+			else if (tickCount != 0)
+			{
+				var hasRemainingPath = pathRemaining.Count > 0;
+				var noPathButValidTarget = pathRemaining.Count == 0 && currPathTarget != WPos.Zero;
+
+				var nextWaypointVisible = false;
+
+				if (hasRemainingPath)
+				{
+					// Check if next waypoint is observable and nearby actors are done
+					// We do not use nearbyActor logic if the next path position is not visible, as this will cause the unit to get stuck
+					nextWaypointVisible = IsPathObservable(
+						self.World, self, locomotor,
+						self.CenterPosition, pathRemaining[0],
+						mobileOffGrid.UnitHitShape, true, 1);
+				}
+
+				if (nextWaypointVisible || noPathButValidTarget)
+				{
+					var nearbyActorHasReachedGoal = completedTargsOfNearbyActors.Contains(currPathTarget) &&
+						//pathRemaining.Count == 0 && // Enable this if you want line formation rather than grouped movement
+						Delta.Length < mobileOffGrid.GenFinalWVec().Length + maxGoalRange.Length;
+					hasReachedGoal = nearbyActorHasReachedGoal; // Consider goal reached if nearby actors are done
+				}
+			}
 
 			if (hasReachedGoal)
 			{

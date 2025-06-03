@@ -754,9 +754,11 @@ namespace OpenRA.Mods.Common.Traits
 
 		public void MobileOffGridMoveTick(Actor self)
 		{
-			// Remove vectors if unit is blocked
-			AddCellCollisionFleeVectors();
+			// Only add cell collision vectors if the unit is moving or being pushed, otherwise this is a waste of resources.
+			if (SeekVectors.Count > 0 || FleeVectors.Count > 0)
+				AddCellCollisionFleeVectors();
 
+			// Remove vectors if unit is blocked
 			var move = ForcedMove == WVec.Zero ? GenFinalWVec() : ForcedMove;
 			if (self.CurrentActivity is not ReturnToCellActivity)
 				move = RemoveBlockedVectors(move, BlockedByCells);
