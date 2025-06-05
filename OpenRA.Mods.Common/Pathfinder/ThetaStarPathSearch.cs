@@ -77,6 +77,7 @@ namespace OpenRA.Mods.Common.Pathfinder
 		public WPos Source;
 		public WPos Dest;
 		public CCPos destCCPos;
+		public CPos destCPos;
 		public CCState minState;
 		public CCState startState;
 		public CCState goalState;
@@ -570,7 +571,7 @@ namespace OpenRA.Mods.Common.Pathfinder
 				// Since the previous parent is invalid, set g-value to infinity.
 				ccState.Gval = int.MaxValue;
 				// Go over potential parents and update its parent to the parent that yields the lowest g-value for s.
-				var stateNeighbours = GetUnblockedNeighbours(thisWorld, self, locomotor, ccState.CC);
+				var stateNeighbours = GetCornerCCStates(thisWorld, self, destCPos, locomotor, ccState.CC, CCLineOfSightFunc);
 				for (var i = 0; i < stateNeighbours.Count; i++)
 				{
 					var newParentState = GetState(stateNeighbours[i]);
@@ -652,6 +653,7 @@ namespace OpenRA.Mods.Common.Pathfinder
 			var sourceCCPos = GetNearestUnblockedCCPos(sourcePos, showDebug: true);
 			overlay.AddPoint(self.World.Map.WPosFromCCPos(sourceCCPos), ThetaStarPathfinderOverlay.OverlayKeyStrings.Test);
 			destCCPos = GetNearestUnblockedCCPos(destPos);
+			destCPos = thisWorld.Map.CellContaining(destPos);
 
 			// If CCPos can be traversed to, but the cell is blocked, we traverse to the CCPos instead of the CPos
 			if (IsCellBlocked(thisWorld.Map.CPosFromCCPos(destCCPos)))
@@ -709,31 +711,23 @@ namespace OpenRA.Mods.Common.Pathfinder
 					if (minState.Gval + thisThetaCache.Get(minState, destCCPos).FinalHval <= minState.Fval)
 						break;
 
-				/* ---------------
-				 * In this case pastGoalState is a previously found path with the same goalState
-				 * So we find its Gval at the current point and replace it with our Gval, to compare if less than minState.Fval
-				 * --------------- */
-				// else if (pastGoalState.Gval - pastGoalState[minState.CC].Gval + minState.Gval <= minState.Fval)
-
 				numCurrExpansions++;
 				numTotalExpansions++;
 
 				ValidateParent(minState);
 				var newParentState = minState.ParentState;
-				var minStateNeighbours = GetUnblockedNeighbours(thisWorld, self, locomotor, minState.CC);
-				for (var i = 0; i < minStateNeighbours.Count; i++)
-				{
-					// if (minStateNeighbours.ElementAt(i) not in solved CCs) continue, otherwise skip this cell and check full path later
-					// Full path logic: All H-values should be stored distinctly from G-values. Subtract the G-value of the other unit,
-					// and add your own. This will let you re-use costs found earlier.
-					var succState = GetState(minStateNeighbours[i]);
 
-					//succState.RenderInIfOverlay(thisWorld, overlay);
+				// Get corner states sorted by distance
+				var cornerNeighbours = GetCornerCCStates(thisWorld, self, destCPos, locomotor, minState.CC, CCLineOfSightFunc);
+
+				foreach (var neighbourPos in cornerNeighbours)
+				{
+					var succState = GetState(neighbourPos);
 
 					if (!ClosedList.Contains(succState, x => x.CC))
 					{
-						var newGval = newParentState.Gval + newParentState.GetEuclidDistanceTo(succState); // Since this is euclid distance, we can skip cells
-						if (newGval < succState.Gval) // && less than bestSavedGval
+						var newGval = newParentState.Gval + newParentState.GetEuclidDistanceTo(succState);
+						if (newGval < succState.Gval)
 						{
 							succState.Gval = newGval;
 							succState.ParentState = newParentState;
@@ -741,11 +735,8 @@ namespace OpenRA.Mods.Common.Pathfinder
 						}
 					}
 				}
-
-				//Console.WriteLine($"OpenList Count: {OpenList.Count}, ClosedList Count: {ClosedList.Count}, currExpansions: {numCurrExpansions}");
 			}
 
-			// If we have exhausted the OpenList, or the maximum number of expansions, we return a path, otherwise we return null
 			if (OpenList.IsEmpty() || goalState.Gval < int.MaxValue || numTotalExpansions >= maxTotalExpansions)
 				UpdatePathIfFound();
 		}
@@ -1119,8 +1110,14 @@ namespace OpenRA.Mods.Common.Pathfinder
 		}
 
 
-		static bool CCIsBlocked(World world, Actor self, Locomotor locomotor, CCPos cc, BlockedByActor check = BlockedByActor.Immovable)
+		static bool CCIsBlocked(World world, Actor self, Locomotor locomotor, CCPos cc, BlockedByActor check = BlockedByActor.Immovable,
+			CPos? includeDest = null)
 		{
+			var TL = world.Map.CellTopLeftOfCCPos(cc);
+			var TR = world.Map.CellTopLeftOfCCPos(cc);
+			var BL = world.Map.CellTopLeftOfCCPos(cc);
+			var BR = world.Map.CellTopLeftOfCCPos(cc);
+
 			var TLBlocked = CellSurroundingCCPosIsBlocked(world, self, locomotor, cc, CellSurroundingCorner.TopLeft, check);
 			var TRBlocked = CellSurroundingCCPosIsBlocked(world, self, locomotor, cc, CellSurroundingCorner.TopRight, check);
 			var BLBlocked = CellSurroundingCCPosIsBlocked(world, self, locomotor, cc, CellSurroundingCorner.BottomLeft, check);
@@ -1131,7 +1128,118 @@ namespace OpenRA.Mods.Common.Pathfinder
 				   (TLBlocked && TRBlocked && BLBlocked) ||
 				   (TLBlocked && TRBlocked && BRBlocked) ||
 				   (BLBlocked && BRBlocked && TLBlocked) ||
-				   (BLBlocked && BRBlocked && TRBlocked);
+				   (BLBlocked && BRBlocked && TRBlocked) ||
+				   (includeDest != null && // We always include the corner if the destination is passed to the method and is one of the corner cells.
+					(includeDest == TL || includeDest == TR || includeDest == BL || includeDest == BR));
+		}
+
+		private static List<CCPos> GetCornerCCStates(World world, Actor self, CPos destCPos, Locomotor locomotor, CCPos cc,
+			Func<CCPos, CCPos, bool> ccLineOfSightFunc, BlockedByActor check = BlockedByActor.Immovable)
+		{
+			if (!CcinMap(cc, world))
+				return new List<CCPos>();
+
+			var validCorners = new HashSet<CCPos>();
+
+			// Add destination corners first if they have line of sight
+			var destCorners = new[]
+			{
+				Map.TopLeftCCPos(destCPos),
+				Map.TopRightCCPos(destCPos),
+				Map.BottomLeftCCPos(destCPos),
+				Map.BottomRightCCPos(destCPos)
+			};
+
+			foreach (var corner in destCorners.Where(c => CcinMap(c, world)))
+			{
+				if (!CCIsBlocked(world, self, locomotor, corner, check) &&
+					ccLineOfSightFunc(cc, corner))
+				{
+					validCorners.Add(corner);
+					return validCorners.ToList(); // Return early if we can see destination corner
+				}
+			}
+
+			// Get corners around blocked cells
+			var allCells = Enumerable.Range(0, world.Map.MapSize.X)
+				.SelectMany(x => Enumerable.Range(0, world.Map.MapSize.Y)
+					.Select(y => new CPos(x, y)))
+				.Where(cell => IsCellBlocked(self, locomotor, cell, check))
+				.ToList();
+
+			foreach (var blockedCell in allCells)
+			{
+				var corners = new[]
+				{
+					Map.TopLeftCCPos(blockedCell),
+					Map.TopRightCCPos(blockedCell),
+					Map.BottomLeftCCPos(blockedCell),
+					Map.BottomRightCCPos(blockedCell)
+				};
+
+				foreach (var corner in corners)
+				{
+					if (!CcinMap(corner, world) ||
+						CCIsBlocked(world, self, locomotor, corner, check) ||
+						validCorners.Contains(corner))
+						continue;
+
+					// Only check LOS if this isn't an adjacent corner
+					// This ensures we can always expand to immediate neighbors
+					if (Math.Abs(corner.X - cc.X) <= 1 && Math.Abs(corner.Y - cc.Y) <= 1)
+						validCorners.Add(corner);
+					else if (ccLineOfSightFunc(cc, corner))
+						validCorners.Add(corner);
+				}
+			}
+
+			return validCorners
+				.OrderBy(corner => (corner.X - cc.X) * (corner.X - cc.X) + (corner.Y - cc.Y) * (corner.Y - cc.Y))
+				.ToList();
+		}
+
+		private static List<CCPos> GetCornerCCStates2(World world, Actor self, CPos destCPos, Locomotor locomotor, CCPos cc,
+			Func<CCPos, CCPos, bool> ccLineOfSightFunc, BlockedByActor check = BlockedByActor.Immovable)
+		{
+			if (!CcinMap(cc, world))
+				return new List<CCPos>();
+
+			// Get all potential CPos cells in the map
+			var allCells = Enumerable.Range(0, world.Map.MapSize.X)
+				.SelectMany(x => Enumerable.Range(0, world.Map.MapSize.Y)
+					.Select(y => new CPos(x, y)))
+				.ToList();
+
+			// Filter to just blocked cells
+			var blockedCellsWithDest = allCells
+				.Where(cell => IsCellBlocked(self, locomotor, cell, check))
+				.Append(destCPos) // We always include the Dest to ensure that the goal can always be found
+				.ToList();
+
+			// Get CCPos corners around blocked cells
+			var cornerCandidates = new HashSet<CCPos>();
+			foreach (var blockedCell in blockedCellsWithDest)
+			{
+				// Get the CCPos corners around this blocked cell
+				cornerCandidates.Add(Map.TopLeftCCPos(blockedCell));
+				cornerCandidates.Add(Map.TopRightCCPos(blockedCell));
+				cornerCandidates.Add(Map.BottomLeftCCPos(blockedCell));
+				cornerCandidates.Add(Map.BottomRightCCPos(blockedCell));
+			}
+
+			// First filter corners that are in map and not blocked
+			var validCorners = cornerCandidates
+				.Where(corner => !CCIsBlocked(world, self, locomotor, corner, check, includeDest: destCPos));
+
+			// Then apply line of sight check only for non-adjacent corners
+			validCorners = validCorners.Where(corner =>
+				(Math.Abs(corner.X - cc.X) <= 1 && Math.Abs(corner.Y - cc.Y) <= 1) || // Adjacent corners don't need LOS check
+				ccLineOfSightFunc(cc, corner));
+
+			// Sort by distance to current CCPos
+			return validCorners
+				.OrderBy(corner => (corner.X - cc.X) * (corner.X - cc.X) + (corner.Y - cc.Y) * (corner.Y - cc.Y))
+				.ToList();
 		}
 
 		static List<CCPos> GetUnblockedNeighbours(World world, Actor self, Locomotor locomotor, CCPos cc,
