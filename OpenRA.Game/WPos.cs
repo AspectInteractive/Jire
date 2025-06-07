@@ -22,6 +22,7 @@ namespace OpenRA
 	{
 		public readonly int X, Y, Z;
 
+		public WPos(int x, int y) { X = x; Y = y; Z = 0; }
 		public WPos(int x, int y, int z) { X = x; Y = y; Z = z; }
 		public WPos(WDist x, WDist y, WDist z) { X = x.Length; Y = y.Length; Z = z.Length; }
 

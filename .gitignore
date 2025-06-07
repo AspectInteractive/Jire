@@ -13,6 +13,9 @@ obj
 _ReSharper.*/
 /.vs
 
+# VS Code
+.editorconfig
+
 # Jire Dev Docs
 devdocs/
 

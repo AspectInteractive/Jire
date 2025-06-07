@@ -21,7 +21,7 @@ using OpenRA.Mods.Common.Pathfinder;
 using OpenRA.Mods.Common.Traits;
 using OpenRA.Primitives;
 using OpenRA.Traits;
-using static OpenRA.Mods.Common.Pathfinder.ThetaStarPathSearch;
+using static OpenRA.Mods.Common.Pathfinder.BaseOffGridPathSearch;
 using static OpenRA.Mods.Common.Traits.MobileOffGrid;
 using static OpenRA.Mods.Common.Traits.MobileOffGridOverlay;
 
@@ -61,7 +61,7 @@ namespace OpenRA.Mods.Common.Activities
 		readonly int maxTicksBeforeLOScheck = 3;
 		readonly Locomotor locomotor;
 
-		ThetaPathfinderExecutionManager thetaPFexecManager;
+		PathfinderExecutionManager thetaPFexecManager;
 		public List<TraitPair<MobileOffGrid>> ActorsSharingMove = new();
 		int cacheTickCount = 0;
 		List<TraitPair<MobileOffGrid>> cachedNearbyActors = null;
@@ -340,7 +340,7 @@ namespace OpenRA.Mods.Common.Activities
 		{
 			usePathFinder = true;
 
-			thetaPFexecManager = self.World.WorldActor.TraitsImplementing<ThetaPathfinderExecutionManager>().FirstOrDefault();
+			thetaPFexecManager = self.World.WorldActor.TraitsImplementing<PathfinderExecutionManager>().FirstOrDefault();
 
 			if (usePathFinder)
 			{
@@ -368,7 +368,7 @@ namespace OpenRA.Mods.Common.Activities
 		{ return pp.ccPos != CCPos.Zero ? PadCC(self.World, self, locomotor, mobileOffGrid, pp.ccPos) : pp.wPos; }
 
 		public List<WPos> GetThetaPathAndConvert(Actor self)
-		{ return mobileOffGrid.CurrThetaSearch.path.ConvertAll(pp => PadCCifCC(self, pp)); }
+		{ return mobileOffGrid.CurrPathSearch.path.ConvertAll(pp => PadCCifCC(self, pp)); }
 
 		public static WPos GetCenterOfUnits(List<TraitPair<MobileOffGrid>> actorsSharingMove)
 		{
@@ -461,7 +461,7 @@ namespace OpenRA.Mods.Common.Activities
 		public override bool Tick(Actor self)
 		{
 			// NOTE: Do not check if the pathfinder is running, as it will automatically turn off after the path is found
-			if (mobileOffGrid.CurrThetaSearch != null && mobileOffGrid.CurrThetaSearch.pathFound
+			if (mobileOffGrid.CurrPathSearch != null && mobileOffGrid.CurrPathSearch.PathFound
 				&& !pathFound)
 			{
 				mobileOffGrid.CurrMovementState = MovementState.Starting;
@@ -479,7 +479,7 @@ namespace OpenRA.Mods.Common.Activities
 				mobileOffGrid.IsBlocked = false;
 				mobileOffGrid.SearchingForNextTarget = false;
 				// end new ending actions
-				mobileOffGrid.CurrThetaSearch = null;
+				mobileOffGrid.CurrPathSearch = null;
 				pathFound = true;
 			}
 
@@ -487,7 +487,7 @@ namespace OpenRA.Mods.Common.Activities
 			if (pathRemaining.Count == 0 && currPathTarget == WPos.Zero)
 			{
 				// Abort if there is no theta path to traverse
-				if (!firstMove && mobileOffGrid.CurrThetaSearch == null)
+				if (!firstMove && mobileOffGrid.CurrPathSearch == null)
 				{
 					EndingActions();
 					return Complete();
@@ -560,7 +560,7 @@ namespace OpenRA.Mods.Common.Activities
 							{
 								mobileOffGrid.CurrMovementState = MovementState.Repathing;
 								thetaPFexecManager.RemovePF(self);
-								mobileOffGrid.CurrThetaSearch = null;
+								mobileOffGrid.CurrPathSearch = null;
 								mobileOffGrid.IsBlocked = false;
 								EndingActions();
 								Complete();

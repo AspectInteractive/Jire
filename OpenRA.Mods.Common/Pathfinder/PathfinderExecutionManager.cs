@@ -17,11 +17,25 @@ using static OpenRA.Mods.Common.Traits.MobileOffGridOverlay;
 namespace OpenRA.Mods.Common.Traits
 {
 	[TraitLocation(SystemActors.World)]
-	[Desc("Manages the queuing and prioritisation of Theta Pathfinder calculations, to ensure the computer is not overloded.")]
+	[Desc("Manages the queuing and prioritisation of Pathfinder calculations, to ensure the computer is not overloded.")]
 
-	public class ThetaPathfinderExecutionManagerInfo : TraitInfo<ThetaPathfinderExecutionManager> { }
-	public class ThetaPathfinderExecutionManager : ITick, IResolveGroupedOrder, IWorldLoaded
+	public class PathfinderExecutionManagerInfo : TraitInfo<PathfinderExecutionManager> { }
+	public class PathfinderExecutionManager : ITick, IResolveGroupedOrder, IWorldLoaded
 	{
+		enum OffGridPathfinder { ThetaStar, NavMesh }
+
+		readonly OffGridPathfinder currOffGridPathfinder = OffGridPathfinder.ThetaStar;
+
+		public BaseOffGridPathSearch CreatePathfinder(Actor self, WPos source, WPos dest, int currDelayToRun = 2)
+		{
+			if (currOffGridPathfinder == OffGridPathfinder.NavMesh)
+				return new NavMeshPathSearch(self, source, dest, currDelayToRun);
+			else if (currOffGridPathfinder == OffGridPathfinder.ThetaStar)
+				return new ThetaStarPathSearch(self, source, dest, currDelayToRun);
+
+			return null;
+		}
+
 		public class ThetaCircle
 		{
 			public struct SliceGroup
@@ -95,11 +109,11 @@ namespace OpenRA.Mods.Common.Traits
 		readonly int maxCircleSlices = 36;
 		readonly Dictionary<PlayerCircleGroupIndex, List<ThetaCircle>> playerCircleGroups = new();
 		public Dictionary<CircleSliceIndex, List<ActorWithOrder>> ActorOrdersInCircleSlices = new();
-		public List<ThetaStarPathSearch> ThetaPFsToRun = new();
-		List<(ThetaStarPathSearch, ThetaPFAction)> thetaPFActions = new();
+		public List<BaseOffGridPathSearch> PFsToRun = new();
+		List<(BaseOffGridPathSearch, PFAction)> thetaPFActions = new();
 		public bool PlayerCirclesLocked = false;
 
-		enum ThetaPFAction { Add, Remove }
+		enum PFAction { Add, Remove }
 		void IWorldLoaded.WorldLoaded(World w, WorldRenderer wr)
 		{
 			locomotor = w.WorldActor.TraitsImplementing<Locomotor>().FirstEnabledTraitOrDefault();
@@ -132,9 +146,9 @@ namespace OpenRA.Mods.Common.Traits
 
 		public void RemovePF(Actor actor, WPos targetPos)
 		{
-			foreach (var thetaPF in ThetaPFsToRun)
-				if (thetaPF.self == actor && (targetPos == WPos.Zero || thetaPF.Dest == targetPos))
-					thetaPFActions.Add((thetaPF, ThetaPFAction.Remove));
+			foreach (var thetaPF in PFsToRun)
+				if (thetaPF.Self == actor && (targetPos == WPos.Zero || thetaPF.Dest == targetPos))
+					thetaPFActions.Add((thetaPF, PFAction.Remove));
 		}
 
 		public void AddMoveOrder(Actor actor, WPos targetPos, List<TraitPair<MobileOffGrid>> sharedMoveActors = null, bool secondThetaRun = false)
@@ -151,26 +165,18 @@ namespace OpenRA.Mods.Common.Traits
 				!GreaterThanMinDistanceForCircles(actor, targetPos) ||
 				sharedMoveActors == null)
 			{
-				var rawThetaStarSearch = new ThetaStarPathSearch(actor.World, actor, actor.CenterPosition,
-																 targetPos)
-				{
-					running = true,
-					ActorsSharingPF = new List<Actor>() { actor }
-				};
-
-				actor.Trait<MobileOffGrid>().CurrThetaSearch = rawThetaStarSearch;
+				var rawThetaStarSearch = CreatePathfinder(actor, actor.CenterPosition, targetPos);
+				rawThetaStarSearch.Running = true;
+				rawThetaStarSearch.ActorsSharingPF = new List<Actor>() { actor };
+				actor.Trait<MobileOffGrid>().CurrPathSearch = rawThetaStarSearch;
 				AddPF(rawThetaStarSearch);
 			}
 			else if (secondThetaRun || actor.CurrentActivity is MobileOffGrid.ReturnToCellActivity)
 			{
-				var rawThetaStarSearch = new ThetaStarPathSearch(actor.World, actor, actor.CenterPosition,
-																 targetPos, 0)
-				{
-					running = true,
-					ActorsSharingPF = new List<Actor>() { actor }
-				};
-
-				actor.Trait<MobileOffGrid>().CurrThetaSearch = rawThetaStarSearch;
+				var rawThetaStarSearch = CreatePathfinder(actor, actor.CenterPosition, targetPos, 0);
+				rawThetaStarSearch.Running = true;
+				rawThetaStarSearch.ActorsSharingPF = new List<Actor>() { actor };
+				actor.Trait<MobileOffGrid>().CurrPathSearch = rawThetaStarSearch;
 				AddPF(rawThetaStarSearch);
 			}
 			else
@@ -228,7 +234,7 @@ namespace OpenRA.Mods.Common.Traits
 			}
 		}
 
-		public void AddPF(ThetaStarPathSearch thetaPF) { thetaPFActions.Add((thetaPF, ThetaPFAction.Add)); }
+		public void AddPF(BaseOffGridPathSearch pathfinder) { thetaPFActions.Add((pathfinder, PFAction.Add)); }
 
 		public List<WPos> GetSliceLine(WPos circleCenter, WDist circleRadius, int sliceAngle, int sliceIndex)
 		{
@@ -239,7 +245,7 @@ namespace OpenRA.Mods.Common.Traits
 				};
 		}
 
-		public void GenSharedMoveThetaPFs(World world)
+		public void GenSharedMovePFs(World world)
 		{
 			// Do not generate shared moves until player circles have been unlocked (i.e. all player circle generation is complete)
 			if (PlayerCirclesLocked)
@@ -302,8 +308,7 @@ namespace OpenRA.Mods.Common.Traits
 																					   .Select(ao => ao.Actor.CenterPosition));
 							var thetaSourcePos = world.Map.WPosFromCCPos(
 								ThetaStarPathSearch.GetNearestUnblockedCCPos(world, firstActorOrder.Actor, locomotor, avgSourcePosOfGroup, 100));
-							var newAvgThetaStarSearch = new ThetaStarPathSearch(firstActorOrder.Actor.World,
-																			 firstActorOrder.Actor, thetaSourcePos,
+							var newAvgThetaStarSearch = CreatePathfinder(firstActorOrder.Actor, thetaSourcePos,
 																			 firstActorOrder.TargetPos);
 
 							// Add Averaged Theta PF back to Actors, and to the GroupedThetaPF list
@@ -318,19 +323,17 @@ namespace OpenRA.Mods.Common.Traits
 										newAvgThetaStarSearch.ActorsSharingPF.Add(actor);
 									else
 										newAvgThetaStarSearch.ActorsSharingPF = new List<Actor> { actor };
-									actorMobileOffGrid.CurrThetaSearch = newAvgThetaStarSearch;
+									actorMobileOffGrid.CurrPathSearch = newAvgThetaStarSearch;
 								}
 								else
 								{
 									individualPFUsed++;
-									var individualAvgThetaStarSearch = new ThetaStarPathSearch(actor.World, actor, actor.CenterPosition,
-										targetPos)
-									{
-										running = true,
-										ActorsSharingPF = new List<Actor> { actor }
-									};
+									var individualAvgThetaStarSearch =
+										CreatePathfinder(actor, actor.CenterPosition, targetPos);
+									individualAvgThetaStarSearch.Running = true;
+									individualAvgThetaStarSearch.ActorsSharingPF = new List<Actor> { actor };
 
-									actorMobileOffGrid.CurrThetaSearch = individualAvgThetaStarSearch;
+									actorMobileOffGrid.CurrPathSearch = individualAvgThetaStarSearch;
 									AddPF(individualAvgThetaStarSearch);
 								}
 							}
@@ -338,7 +341,7 @@ namespace OpenRA.Mods.Common.Traits
 							// If all actors are using an individual pathfinder then we do not use the averaged pathfinder
 							if (individualPFUsed < actorOrdersInSliceGroup.Count)
 							{
-								newAvgThetaStarSearch.running = true;
+								newAvgThetaStarSearch.Running = true;
 								AddPF(newAvgThetaStarSearch);
 							}
 						}
@@ -358,37 +361,37 @@ namespace OpenRA.Mods.Common.Traits
 
 			// We only add or remove Theta PFs during tick cycle to ensure integrity is maintained
 			foreach (var (thetaPF, action) in thetaPFActions)
-				if (action == ThetaPFAction.Remove)
-					ThetaPFsToRun.Remove(thetaPF);
-				else if (action == ThetaPFAction.Add)
-					ThetaPFsToRun.Add(thetaPF);
+				if (action == PFAction.Remove)
+					PFsToRun.Remove(thetaPF);
+				else if (action == PFAction.Add)
+					PFsToRun.Add(thetaPF);
 			thetaPFActions.Clear();
 
 			// If there are new playerCircles to resolve, we resolve these first to populate ThetaPFsToRun.
 			if (playerCircleGroups.Count > 0)
-				GenSharedMoveThetaPFs(world);
+				GenSharedMovePFs(world);
 
-			for (var i = ThetaPFsToRun.Count; i > 0; i--) // Iterate backwards since we may remove PFs that are no longer expanding
+			for (var i = PFsToRun.Count; i > 0; i--) // Iterate backwards since we may remove PFs that are no longer expanding
 			{
-				var thetaPF = ThetaPFsToRun[i - 1];
-				foreach (var actor in thetaPF.ActorsSharingPF)
+				var currPF = PFsToRun[i - 1];
+				foreach (var actor in currPF.ActorsSharingPF)
 				{
 					var actorMobileOG = actor.TraitsImplementing<MobileOffGrid>().FirstOrDefault(Exts.IsTraitEnabled);
 					actorMobileOG.Overlay.AddText(actorMobileOG.CenterPosition, i.ToString(), Color.Yellow, (int)PersistConst.Never,
 						key: OverlayKeyStrings.PFNumber);
 				}
 
-				if (thetaPF.running && !thetaPF.pathFound)
+				if (currPF.Running && !currPF.PathFound)
 				{
-					if (thetaPF.currDelayToRun == 0)
-						thetaPF.Expand((int)Fix64.Ceiling((Fix64)maxCurrExpansions / (Fix64)ThetaPFsToRun.Count));
-					else if (thetaPF.currDelayToRun > 0)
-						thetaPF.currDelayToRun--; // keep subtracting the delay each tick until 0 is reached
+					if (currPF.CurrDelayToRun == 0)
+						currPF.Expand((int)Fix64.Ceiling((Fix64)maxCurrExpansions / (Fix64)PFsToRun.Count));
+					else if (currPF.CurrDelayToRun > 0)
+						currPF.CurrDelayToRun--; // keep subtracting the delay each tick until 0 is reached
 				}
 				else
 				{
-					thetaPF.currDelayToRun = -1;
-					ThetaPFsToRun.RemoveAt(i - 1); // Remove if no longer expanding
+					currPF.CurrDelayToRun = -1;
+					PFsToRun.RemoveAt(i - 1); // Remove if no longer expanding
 				}
 			}
 		}

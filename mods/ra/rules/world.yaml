@@ -11,8 +11,8 @@
 	TerrainGeometryOverlay:
 	CollisionDebugOverlay:
 	ClearThetaStarPathfinderOverlay:
-	ThetaStarPathfinderOverlay:    
-	ThetaPathfinderExecutionManager:
+	ThetaStarPathfinderOverlay:
+	PathfinderExecutionManager:
 	CPosCoordsDebugOverlay:
 	DebugVisualizations:
 	ThetaStarCache:

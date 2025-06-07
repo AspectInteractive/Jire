@@ -11,10 +11,7 @@
 
 using System;
 using System.Collections.Generic;
-using System.Diagnostics.Metrics;
 using System.Linq;
-using Linguini.Syntax.Ast;
-using Microsoft.VisualBasic;
 using OpenRA.Activities;
 using OpenRA.Mods.Common.Activities;
 using OpenRA.Mods.Common.Orders;
@@ -23,11 +20,7 @@ using static OpenRA.Mods.Common.Traits.MobileOffGridOverlay;
 using OpenRA.Primitives;
 using OpenRA.Support;
 using OpenRA.Traits;
-using TagLib.Riff;
 using OpenRA.Mods.Common.HitShapes;
-using static OpenRA.Mods.Common.Traits.MobileOffGrid;
-using System.Reflection;
-
 
 #pragma warning disable SA1513 // Closing brace should be followed by blank line
 
@@ -332,7 +325,7 @@ namespace OpenRA.Mods.Common.Traits
 		public WPos CurrPathTarget;
 		public WPos LastPathTarget;
 		public WPos LastCompletedTarget;
-		public ThetaStarPathSearch CurrThetaSearch;
+		public BaseOffGridPathSearch CurrPathSearch;
 		public bool SearchingForNextTarget = false;
 		public bool IsBlocked = false;
 		bool useLocalAvoidance = true; // determines whether the local avoidance algorithm should be used to avoid nearby units

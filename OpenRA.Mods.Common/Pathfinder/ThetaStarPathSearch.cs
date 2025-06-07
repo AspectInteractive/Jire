@@ -36,14 +36,13 @@ using static OpenRA.Mods.Common.Traits.MobileOffGrid;
 
 namespace OpenRA.Mods.Common.Pathfinder
 {
-	public class ThetaStarPathSearch
+	public class ThetaStarPathSearch : BaseOffGridPathSearch
 	{
-		static readonly List<PathPos> EmptyPath = new List<PathPos>(0);
 		ThetaStarPathfinderOverlay overlay;
 
 		public void RenderPathIfOverlay(List<WPos> path)
 		{
-			var overlay = thisWorld.WorldActor.TraitsImplementing<ThetaStarPathfinderOverlay>().FirstEnabledTraitOrDefault();
+			var overlay = world.WorldActor.TraitsImplementing<ThetaStarPathfinderOverlay>().FirstEnabledTraitOrDefault();
 			if (overlay.Enabled)
 			{
 				var renderPath = new List<WPos>();
@@ -51,40 +50,17 @@ namespace OpenRA.Mods.Common.Pathfinder
 					renderPath.Add(pos);
 
 				if (path.Count > 1) // cannot render a path of length 1
-					overlay.AddPath(self, renderPath);
-			}
-		}
-
-		public struct PathPos
-		{
-			public CCPos ccPos;
-			public WPos wPos;
-
-			public PathPos(WPos wPos, CCPos ccPos)
-			{
-				this.wPos = wPos;
-				this.ccPos = ccPos;
-			}
-			public PathPos(WPos wPos)
-			{
-				this.wPos = wPos;
-				ccPos = CCPos.Zero;
+					overlay.AddPath(Self, renderPath);
 			}
 		}
 
 		public List<Actor> ActorsSharingPF;
 		public bool AtStart = true;
-		public WPos Source;
-		public WPos Dest;
 		public CCPos destCCPos;
 		public CPos destCPos;
 		public CCState minState;
 		public CCState startState;
 		public CCState goalState;
-		public List<PathPos> path = new List<PathPos>();
-		public bool pathFound = false;
-		public bool running = false;
-		public int currDelayToRun = -1; // This is the number of ticks required to elapse before this PF runs
 		public int numTotalExpansions;
 		// Total number of expansions for each lazy expand call per tick. Does not affect total number of allowed expansions (see maxTotalExpansions)
 		public int maxCurrExpansions = -1;
@@ -214,7 +190,7 @@ namespace OpenRA.Mods.Common.Pathfinder
 													  WPos rootPos, WPos goalPos)
 		{
 			foreach (var cc in ccList)
-				ccStateList.Add(new CCState(cc, goalPos, thisWorld));
+				ccStateList.Add(new CCState(cc, goalPos, world));
 		}
 
 		public sealed class CustomLinkedList<T>
@@ -301,13 +277,9 @@ namespace OpenRA.Mods.Common.Pathfinder
 			return pathObsCache[key];
 		}
 
-		private readonly World thisWorld;
 		private readonly ThetaStarCache thisThetaCache;
-		public readonly Actor self;
 		private Func<CCPos, CCPos, bool> CCLineOfSightFunc;
 		private bool skipInitialLOSCheck = false;
-		public readonly MobileOffGrid mobileOffGrid;
-		private readonly Locomotor locomotor;
 		private readonly int ccPosMaxSizeX;
 		private readonly int ccPosMaxSizeY;
 		private readonly int ccPosMinSizeX;
@@ -317,14 +289,11 @@ namespace OpenRA.Mods.Common.Pathfinder
 		private readonly int cPosMinSizeX;
 		private readonly int cPosMinSizeY;
 
-		private enum CellSurroundingCorner : byte { TopLeft, TopRight, BottomLeft, BottomRight }
-
 		private void EndingActions(bool pathWasFound)
 		{
-			pathFound = pathWasFound;
-			running = false;
+			PathFound = pathWasFound;
+			Running = false;
 		}
-
 
 		private void AddStateToOpen(CCState state)
 		{
@@ -458,7 +427,7 @@ namespace OpenRA.Mods.Common.Pathfinder
 		{
 			var ccKey = (cc.X, cc.Y);
 			if (!ccStateList.ContainsKey(ccKey))
-				ccStateList.Add(ccKey, new CCState(cc, Dest, thisWorld));
+				ccStateList.Add(ccKey, new CCState(cc, Dest, world));
 			return ccStateList[ccKey];
 		}
 
@@ -474,7 +443,7 @@ namespace OpenRA.Mods.Common.Pathfinder
 		{
 			var ccKey = (cc.X, cc.Y);
 			if (!ccStateList.ContainsKey(ccKey))
-				ccStateList.Add(ccKey, new CCState(cc, Dest, gval, parentState, thisWorld));
+				ccStateList.Add(ccKey, new CCState(cc, Dest, gval, parentState, world));
 			ccStateList[ccKey].Gval = gval;
 			ccStateList[ccKey].ParentState = parentState;
 		}
@@ -485,7 +454,7 @@ namespace OpenRA.Mods.Common.Pathfinder
 		{
 			var ccKey = (cc.X, cc.Y);
 			if (!ccStateList.ContainsKey(ccKey))
-				ccStateList.Add(ccKey, new CCState(cc, Dest, gval, thisWorld));
+				ccStateList.Add(ccKey, new CCState(cc, Dest, gval, world));
 			ccStateList[ccKey].Gval = gval;
 		}
 		private void UpdateState(CCState ccState, int gval)
@@ -495,7 +464,7 @@ namespace OpenRA.Mods.Common.Pathfinder
 		{
 			var ccKey = (cc.X, cc.Y);
 			if (!ccStateList.ContainsKey(ccKey))
-				ccStateList.Add(ccKey, new CCState(cc, Dest, parentState, thisWorld));
+				ccStateList.Add(ccKey, new CCState(cc, Dest, parentState, world));
 			ccStateList[ccKey].ParentState = parentState;
 		}
 		private void UpdateState(CCState ccState, CCState parentState)
@@ -515,53 +484,6 @@ namespace OpenRA.Mods.Common.Pathfinder
 			return firstState.Value;
 		}
 
-		// This will pad the ccPos in a path with a set amount of padding based on the actor's radius
-		// Four cases: Note that only one direction is shown below, but other directions are simply mirrors
-		//
-		// XO                    OX                   XO                    XO
-		// XX - move point TR    OO - move point BL   XO - move point R     OX - should not happen (to be tested)
-
-		public WPos PadCC(CCPos cc) { return PadCC(thisWorld, self, locomotor, mobileOffGrid, cc); }
-		public static WPos PadCC(World world, Actor self, Locomotor locomotor, MobileOffGrid mobileOG, CCPos cc)
-		{
-			var ccPos = world.Map.WPosFromCCPos(cc);
-			var unitRadius = mobileOG.UnitRadius.Length;
-
-			var topLeftBlocked = CellSurroundingCCPosIsBlocked(world, self, locomotor, cc, CellSurroundingCorner.TopLeft);
-			var topRightBlocked = CellSurroundingCCPosIsBlocked(world, self, locomotor, cc, CellSurroundingCorner.TopRight);
-			var botLeftBlocked = CellSurroundingCCPosIsBlocked(world, self, locomotor, cc, CellSurroundingCorner.BottomLeft);
-			var botRightBlocked = CellSurroundingCCPosIsBlocked(world, self, locomotor, cc, CellSurroundingCorner.BottomRight);
-
-			var blockedList = new List<bool>() { topLeftBlocked, topRightBlocked, botLeftBlocked, botRightBlocked };
-			var areBlocked = blockedList.Where(c => c == true).ToList();
-
-			if (areBlocked.Count == 1 || areBlocked.Count == 3)
-			{
-				if (topLeftBlocked || (topLeftBlocked && botLeftBlocked && topRightBlocked))
-					return new WPos(ccPos.X + unitRadius, ccPos.Y + unitRadius, ccPos.Z);
-				if (topRightBlocked || (topRightBlocked && topLeftBlocked && botRightBlocked))
-					return new WPos(ccPos.X - unitRadius, ccPos.Y + unitRadius, ccPos.Z);
-				if (botLeftBlocked || (botLeftBlocked && topLeftBlocked && botRightBlocked))
-					return new WPos(ccPos.X + unitRadius, ccPos.Y - unitRadius, ccPos.Z);
-				if (botRightBlocked || (botRightBlocked && botLeftBlocked && topRightBlocked))
-					return new WPos(ccPos.X - unitRadius, ccPos.Y - unitRadius, ccPos.Z);
-			}
-			else if (areBlocked.Count == 2)
-			{
-				if (topLeftBlocked && topRightBlocked)
-					return new WPos(ccPos.X, ccPos.Y + unitRadius, ccPos.Z);
-				if (topLeftBlocked && botLeftBlocked)
-					return new WPos(ccPos.X + unitRadius, ccPos.Y, ccPos.Z);
-				if (botLeftBlocked && botRightBlocked)
-					return new WPos(ccPos.X, ccPos.Y - unitRadius, ccPos.Z);
-				if (topRightBlocked && botRightBlocked)
-					return new WPos(ccPos.X - unitRadius, ccPos.Y, ccPos.Z);
-				return ccPos; // This is the case where the 2 blocked cells are diagonally adjacent, and should never happen.
-			}
-
-			return ccPos;
-		}
-
 		public void ValidateParent(CCState ccState)
 		{
 			// Lazy Theta* assumes that there is always line-of-sight from the parent of an expanded state to a successor state.
@@ -571,7 +493,7 @@ namespace OpenRA.Mods.Common.Pathfinder
 				// Since the previous parent is invalid, set g-value to infinity.
 				ccState.Gval = int.MaxValue;
 				// Go over potential parents and update its parent to the parent that yields the lowest g-value for s.
-				var stateNeighbours = GetCornerCCStates(thisWorld, self, destCPos, locomotor, ccState.CC, CCLineOfSightFunc);
+				var stateNeighbours = GetCornerCCStates(world, Self, destCPos, locomotor, ccState.CC, CCLineOfSightFunc);
 				for (var i = 0; i < stateNeighbours.Count; i++)
 				{
 					var newParentState = GetState(stateNeighbours[i]);
@@ -594,7 +516,7 @@ namespace OpenRA.Mods.Common.Pathfinder
 		public void Initialize(WPos sourcePos, WPos destPos)
 		{
 			ResetLists();
-			overlay = self.World.WorldActor.TraitsImplementing<ThetaStarPathfinderOverlay>().FirstEnabledTraitOrDefault();
+			overlay = Self.World.WorldActor.TraitsImplementing<ThetaStarPathfinderOverlay>().FirstEnabledTraitOrDefault();
 
 			if (sourcePos == destPos)
 			{
@@ -605,7 +527,7 @@ namespace OpenRA.Mods.Common.Pathfinder
 			// We first check if we can move to the target directly. If so, skip all pathfinding and return the list (sourcePos, destPos)
 			// We do not need to check if the dest is reachable since there are no obstacles to it
 			if (!skipInitialLOSCheck && (IsPathObservable(sourcePos, destPos, mobileOffGrid.UnitHitShape, true, 0) ||
-				(self.CurrentActivity is ReturnToCellActivity))) // Path does not need to be observable if the unit is returning to a cell
+				(Self.CurrentActivity is ReturnToCellActivity))) // Path does not need to be observable if the unit is returning to a cell
 			{
 				path.Add(new PathPos(sourcePos));
 				path.Add(new PathPos(destPos));
@@ -614,24 +536,24 @@ namespace OpenRA.Mods.Common.Pathfinder
 				EndingActions(true);
 			}
 
-			var hpf = thisWorld.WorldActor.Trait<IPathFinder>();
-			bool CellDestIsReachable(CPos cell) => hpf.PathExistsForLocomotor(locomotor, thisWorld.Map.CellContaining(sourcePos),
+			var hpf = world.WorldActor.Trait<IPathFinder>();
+			bool CellDestIsReachable(CPos cell) => hpf.PathExistsForLocomotor(locomotor, world.Map.CellContaining(sourcePos),
 				cell, BlockedByActor.Immovable);
 
 			// Logic for finding closest pathable location to an invalid location by drawing a line from dest to source and picking the
 			// closest cell
 			var revisedDest = WPos.Zero;
-			var destToTestCell = thisWorld.Map.CellContaining(destPos);
+			var destToTestCell = world.Map.CellContaining(destPos);
 
 			if (IsCellBlocked(destToTestCell) || !CellDestIsReachable(destToTestCell))
 			{
-				var cellsUnderneathALine = GetAllCellsUnderneathALine(thisWorld, sourcePos, destPos, 1)
-				.OrderBy(c => (destPos - thisWorld.Map.CenterOfCell(c)).LengthSquared); // shortest distances are checked first
+				var cellsUnderneathALine = GetAllCellsUnderneathALine(world, sourcePos, destPos, 1)
+				.OrderBy(c => (destPos - world.Map.CenterOfCell(c)).LengthSquared); // shortest distances are checked first
 
 				foreach (var cell in cellsUnderneathALine)
 					if (!IsCellBlocked(cell) && CellDestIsReachable(cell))
 					{
-						revisedDest = thisWorld.Map.CenterOfCell(cell);
+						revisedDest = world.Map.CenterOfCell(cell);
 						break;
 					}
 			}
@@ -651,13 +573,13 @@ namespace OpenRA.Mods.Common.Pathfinder
 			Dest = destPos;
 
 			var sourceCCPos = GetNearestUnblockedCCPos(sourcePos, showDebug: true);
-			overlay.AddPoint(self.World.Map.WPosFromCCPos(sourceCCPos), ThetaStarPathfinderOverlay.OverlayKeyStrings.Test);
+			overlay.AddPoint(Self.World.Map.WPosFromCCPos(sourceCCPos), ThetaStarPathfinderOverlay.OverlayKeyStrings.Test);
 			destCCPos = GetNearestUnblockedCCPos(destPos);
-			destCPos = thisWorld.Map.CellContaining(destPos);
+			destCPos = world.Map.CellContaining(destPos);
 
 			// If CCPos can be traversed to, but the cell is blocked, we traverse to the CCPos instead of the CPos
-			if (IsCellBlocked(thisWorld.Map.CPosFromCCPos(destCCPos)))
-				Dest = thisWorld.Map.WPosFromCCPos(destCCPos);
+			if (IsCellBlocked(world.Map.CPosFromCCPos(destCCPos)))
+				Dest = world.Map.WPosFromCCPos(destCCPos);
 
 			startState = GetState(sourceCCPos);
 			goalState = GetState(destCCPos);
@@ -681,7 +603,7 @@ namespace OpenRA.Mods.Common.Pathfinder
 				while (currState != startState)
 				{
 					//var ccToUse = PadCC(currState.CC);
-					var pathPos = new PathPos(thisWorld.Map.WPosFromCCPos(currState.CC), currState.CC);
+					var pathPos = new PathPos(world.Map.WPosFromCCPos(currState.CC), currState.CC);
 					// path.Add(thisWorld.Map.WPosFromCCPos(currState.CC)); // Swap above line with this if not using padding
 					path.Add(pathPos);
 					thisThetaCache.Add(currState, destCCPos, Dest, goalState.Gval); // add to cache for future look-ups, this is the best path from this particular position
@@ -698,7 +620,7 @@ namespace OpenRA.Mods.Common.Pathfinder
 			EndingActions(true);
 		}
 
-		public void Expand(int inMaxCurrExpansions)
+		public override void Expand(int inMaxCurrExpansions)
 		{
 			var numCurrExpansions = 0;
 			maxCurrExpansions = inMaxCurrExpansions;
@@ -718,7 +640,7 @@ namespace OpenRA.Mods.Common.Pathfinder
 				var newParentState = minState.ParentState;
 
 				// Get corner states sorted by distance
-				var cornerNeighbours = GetCornerCCStates(thisWorld, self, destCPos, locomotor, minState.CC, CCLineOfSightFunc);
+				var cornerNeighbours = GetCornerCCStates(world, Self, destCPos, locomotor, minState.CC, CCLineOfSightFunc);
 
 				foreach (var neighbourPos in cornerNeighbours)
 				{
@@ -833,7 +755,7 @@ namespace OpenRA.Mods.Common.Pathfinder
 #pragma warning restore SA1312 // Variable names should begin with lower-case letter
 
 		// This could potentially be optimised with great care, currently it returns a bounding box of cells for a given line (WPos -> Wpos)
-		public List<CPos> GetAllCellsUnderneathALineOld(WPos a0, WPos a1) { return GetAllCellsUnderneathALineOld(thisWorld, a0, a1); }
+		public List<CPos> GetAllCellsUnderneathALineOld(WPos a0, WPos a1) { return GetAllCellsUnderneathALineOld(world, a0, a1); }
 
 		// This could potentially be optimised with great care, currently it returns a bounding box of cells for a given line (WPos -> Wpos)
 		public static List<CPos> GetAllCellsUnderneathALineOld(World world, WPos a0, WPos a1)
@@ -854,7 +776,7 @@ namespace OpenRA.Mods.Common.Pathfinder
 		}
 
 		// Bresenham Line Algorithmng box of cells for a given line (WPos -> Wpos) https://en.wikipedia.org/wiki/Bresenham%27s_line_algorithm
-		public List<CPos> GetAllCellsUnderneathALine(WPos a0, WPos a1) { return GetAllCellsUnderneathALine(thisWorld, a0, a1); }
+		public List<CPos> GetAllCellsUnderneathALine(WPos a0, WPos a1) { return GetAllCellsUnderneathALine(world, a0, a1); }
 
 		public static List<CPos> GetAllCellsUnderneathALine(World world, WPos a0, WPos a1, int neighboursToCount = 0)
 		{
@@ -922,7 +844,7 @@ namespace OpenRA.Mods.Common.Pathfinder
 		}
 
 		public bool AreCellsIntersectingPath(List<CPos> cells, WPos sourcePos, WPos destPos)
-		{ return AreCellsIntersectingPath(thisWorld, self, locomotor, cells, sourcePos, destPos); }
+		{ return AreCellsIntersectingPath(world, Self, locomotor, cells, sourcePos, destPos); }
 
 		public static bool AreCellsIntersectingPath(World world, Actor self, Locomotor locomotor,
 													List<CPos> cells, WPos sourcePos, WPos destPos)
@@ -941,7 +863,7 @@ namespace OpenRA.Mods.Common.Pathfinder
 		}
 
 		public bool IsPathObservable(WPos rootPos, WPos destPos, IHitShape unitHitShape, bool useUnitRadius, int neighbours)
-			=> IsPathObservable(thisWorld, self, locomotor, rootPos, destPos, unitHitShape, useUnitRadius, neighbours);
+			=> IsPathObservable(world, Self, locomotor, rootPos, destPos, unitHitShape, useUnitRadius, neighbours);
 		public static bool IsPathObservable(World world, Actor self, Locomotor locomotor, WPos rootPos, WPos destPos,
 			IHitShape unitHitShape, bool useUnitRadius, int neighbours)
 		{
@@ -965,11 +887,11 @@ namespace OpenRA.Mods.Common.Pathfinder
 		}
 
 		public bool IsPathObservable(CCPos rootCC, CCPos destCC, IHitShape unitHitShape, bool useUnitRadius, int neighbours)
-			=> IsPathObservable(thisWorld.Map.WPosFromCCPos(rootCC), thisWorld.Map.WPosFromCCPos(destCC), unitHitShape, useUnitRadius, neighbours);
+			=> IsPathObservable(world.Map.WPosFromCCPos(rootCC), world.Map.WPosFromCCPos(destCC), unitHitShape, useUnitRadius, neighbours);
 		public bool IsPathObservable(WPos rootPos, CCPos destCC, IHitShape unitHitShape, bool useUnitRadius, int neighbours)
-			=> IsPathObservable(rootPos, thisWorld.Map.WPosFromCCPos(destCC), unitHitShape, useUnitRadius, neighbours);
+			=> IsPathObservable(rootPos, world.Map.WPosFromCCPos(destCC), unitHitShape, useUnitRadius, neighbours);
 		public bool IsPathObservable(CCPos rootCC, WPos destPos, IHitShape unitHitShape, bool useUnitRadius, int neighbours)
-			=> IsPathObservable(thisWorld.Map.WPosFromCCPos(rootCC), destPos, unitHitShape, useUnitRadius, neighbours);
+			=> IsPathObservable(world.Map.WPosFromCCPos(rootCC), destPos, unitHitShape, useUnitRadius, neighbours);
 
 		static int HeuristicFunction(CCPos cc, WPos goalPos, World world)
 		{
@@ -988,7 +910,7 @@ namespace OpenRA.Mods.Common.Pathfinder
 			return ccPos.X >= 0 && ccPos.X <= world.Map.MapSize.X
 				&& ccPos.Y >= 0 && ccPos.Y <= world.Map.MapSize.Y;
 		}
-		bool CcinMap(CCPos ccPos) { return CcinMap(ccPos, thisWorld); }
+		bool CcinMap(CCPos ccPos) { return CcinMap(ccPos, world); }
 
 		bool CPosinMap(CPos cPos)
 		{
@@ -1006,7 +928,7 @@ namespace OpenRA.Mods.Common.Pathfinder
 			return new CCPos(Math.Max(Math.Min(ccPos.X, world.Map.MapSize.X), 0),
 			                 Math.Max(Math.Min(ccPos.Y, world.Map.MapSize.Y), 0));
 		}
-		CCPos ClosestCCPosInMap(CCPos ccPos) { return ClosestCCPosInMap(ccPos, thisWorld); }
+		CCPos ClosestCCPosInMap(CCPos ccPos) { return ClosestCCPosInMap(ccPos, world); }
 
 		// need to use this func to clamp to cell to ensure compatibility with isometric grids
 
@@ -1061,37 +983,17 @@ namespace OpenRA.Mods.Common.Pathfinder
 		}
 
 		CCPos GetNearestUnblockedCCPos(WPos pos, bool showDebug = false)
-			=> GetNearestUnblockedCCPos(thisWorld, self, locomotor, pos, showDebug: showDebug);
+			=> GetNearestUnblockedCCPos(world, Self, locomotor, pos, showDebug: showDebug);
 
 		CCPos GetNearestUnblockedCCPos(WPos pos, int maxExpansions, bool showDebug)
-			=> GetNearestUnblockedCCPos(thisWorld, self, locomotor, pos, maxExpansions, showDebug);
+			=> GetNearestUnblockedCCPos(world, Self, locomotor, pos, maxExpansions, showDebug);
 
-		bool IsCellBlocked(CPos? cell) { return IsCellBlocked(self, locomotor, cell); }
+		bool IsCellBlocked(CPos? cell) { return IsCellBlocked(Self, locomotor, cell); }
 		public static bool IsCellBlocked(Actor self, Locomotor locomotor, CPos? cell, BlockedByActor check = BlockedByActor.None)
 		{
 			if (cell == null)
 				return true; // All invalid cells are blocked
 			return CellIsBlockedCache(self, locomotor, (CPos)cell, check);
-		}
-
-		bool CellSurroundingCCPosIsBlocked(CCPos ccPos, CellSurroundingCorner cellSurroundingCorner, BlockedByActor check = BlockedByActor.Immovable)
-		{ return CellSurroundingCCPosIsBlocked(thisWorld, self, locomotor, ccPos, cellSurroundingCorner, check); }
-		static bool CellSurroundingCCPosIsBlocked(World world, Actor self, Locomotor locomotor,
-														  CCPos ccPos, CellSurroundingCorner cellSurroundingCorner, BlockedByActor check = BlockedByActor.Immovable)
-		{
-			switch (cellSurroundingCorner)
-			{
-				case CellSurroundingCorner.TopLeft:
-					return IsCellBlocked(self, locomotor, world.Map.CellTopLeftOfCCPos(ccPos), check);
-				case CellSurroundingCorner.TopRight:
-					return IsCellBlocked(self, locomotor, world.Map.CellTopRightOfCCPos(ccPos), check);
-				case CellSurroundingCorner.BottomLeft:
-					return IsCellBlocked(self, locomotor, world.Map.CellBottomLeftOfCCPos(ccPos), check);
-				case CellSurroundingCorner.BottomRight:
-					return IsCellBlocked(self, locomotor, world.Map.CellBottomRightOfCCPos(ccPos), check);
-				default:
-					return false;
-			}
 		}
 
 		static List<CCPos> GetCCNeighbours(CCPos cc)
@@ -1302,87 +1204,31 @@ namespace OpenRA.Mods.Common.Pathfinder
 			return excDiagBlocked ? neighbourList.Where(c => !DiagBlockedCCPos(self, world, locomotor, c)).ToList() : neighbourList;
 		}
 
-		//// NOTE: DiagBlocked means cells blocked are checkered (e.g. for a 2x2 grid the top left and bottom right are blocked or top right and bottom left are blocked)
-		//static List<CCPos> GetUnblockedNeighbours(World world, Actor self, Locomotor locomotor, CCPos cc,
-		//	bool excDiagBlocked = true, BlockedByActor check = BlockedByActor.Immovable)
-		//{
-		//	if (!CcinMap(cc, world))
-		//		return new List<CCPos>();
-
-		//	var neighbourList = new List<CCPos>();
-
-		//	var ccT = new CCPos(cc.X, cc.Y - 1, cc.Layer);
-		//	var ccTL = new CCPos(cc.X - 1, cc.Y - 1, cc.Layer);
-		//	var ccTR = new CCPos(cc.X + 1, cc.Y - 1, cc.Layer);
-		//	var ccB = new CCPos(cc.X, cc.Y + 1, cc.Layer);
-		//	var ccBL = new CCPos(cc.X - 1, cc.Y + 1, cc.Layer);
-		//	var ccBR = new CCPos(cc.X + 1, cc.Y + 1, cc.Layer);
-		//	var ccL = new CCPos(cc.X - 1, cc.Y, cc.Layer);
-		//	var ccR = new CCPos(cc.X + 1, cc.Y, cc.Layer);
-
-		//	bool CellSurroundingCCIsBlocked(CCPos x, CellSurroundingCorner corner) => CellSurroundingCCPosIsBlocked(world, self, locomotor, x, corner, check);
-
-		//	var TLBlocked = CellSurroundingCCIsBlocked(cc, CellSurroundingCorner.TopLeft);
-		//	var TRBlocked = CellSurroundingCCIsBlocked(cc, CellSurroundingCorner.TopRight);
-		//	var BLBlocked = CellSurroundingCCIsBlocked(cc, CellSurroundingCorner.BottomLeft);
-		//	var BRBlocked = CellSurroundingCCIsBlocked(cc, CellSurroundingCorner.BottomRight);
-
-		//	var topBlocked = TLBlocked && TRBlocked;
-		//	var botBlocked = BLBlocked && BRBlocked;
-		//	var leftBlocked = TLBlocked && BLBlocked;
-		//	var rightBlocked = TRBlocked && BRBlocked;
-
-		//	if (CcinMap(ccT, world) && !topBlocked)
-		//		neighbourList.Add(ccT);
-		//	if (CcinMap(ccTL, world) && !TLBlocked &&
-		//		(!excDiagBlocked || (!CellSurroundingCCIsBlocked(ccTL, CellSurroundingCorner.BottomLeft) &&
-		//							 !CellSurroundingCCIsBlocked(ccTL, CellSurroundingCorner.TopRight))))
-		//		neighbourList.Add(ccTL);
-		//	if (CcinMap(ccTR, world) && !TRBlocked &&
-		//		(!excDiagBlocked || (!CellSurroundingCCIsBlocked(ccTR, CellSurroundingCorner.BottomRight) &&
-		//							 !CellSurroundingCCIsBlocked(ccTR, CellSurroundingCorner.TopLeft))))
-		//		neighbourList.Add(ccTR);
-		//	if (CcinMap(ccB, world) && !botBlocked)
-		//		neighbourList.Add(ccB);
-		//	if (CcinMap(ccBL, world) && !BLBlocked &&
-		//		(!excDiagBlocked || (!CellSurroundingCCIsBlocked(ccBL, CellSurroundingCorner.TopLeft) &&
-		//							 !CellSurroundingCCIsBlocked(ccBL, CellSurroundingCorner.BottomRight))))
-		//		neighbourList.Add(ccBL);
-		//	if (CcinMap(ccBR, world) && !BRBlocked &&
-		//		(!excDiagBlocked || (!CellSurroundingCCIsBlocked(ccBR, CellSurroundingCorner.TopRight) &&
-		//							 !CellSurroundingCCIsBlocked(ccBR, CellSurroundingCorner.BottomLeft))))
-		//		neighbourList.Add(ccBR);
-		//	if (CcinMap(ccL, world) && !leftBlocked)
-		//		neighbourList.Add(ccL);
-		//	if (CcinMap(ccR, world) && !rightBlocked)
-		//		neighbourList.Add(ccR);
-
-		//	return neighbourList;
-		//}
+		public override List<WPos> FindPath(WPos start, WPos goal)
+		{
+			throw new NotImplementedException();
+		}
 
 		#region Constructors
-		public ThetaStarPathSearch(World world, Actor self, WPos sourcePos, WPos destPos, int currDelayToRun = 2)
+		public ThetaStarPathSearch(Actor self, WPos sourcePos, WPos destPos, int currDelayToRun = 2)
+		: base(self, sourcePos, destPos, currDelayToRun)
 		{
-			thisWorld = world;
-			this.currDelayToRun = currDelayToRun;
 			thisThetaCache = world.WorldActor.TraitsImplementing<ThetaStarCache>().FirstEnabledTraitOrDefault();
-			if (thisWorld.Map.Grid.Type != MapGridType.Rectangular)
+			if (world.Map.Grid.Type != MapGridType.Rectangular)
 			{
 				CCLineOfSightFunc = LineOfSight;
 				skipInitialLOSCheck = true;
 			}
 			else
 				CCLineOfSightFunc = (ccPos1, ccPos2) => IsPathObsCached(ccPos1, ccPos2, false);
-			this.self = self;
-			mobileOffGrid = self.TraitsImplementing<MobileOffGrid>().FirstOrDefault(Exts.IsTraitEnabled);
-			locomotor = thisWorld.WorldActor.TraitsImplementing<Locomotor>().FirstEnabledTraitOrDefault();
-			ccPosMaxSizeX = thisWorld.Map.MapSize.X;
+			base.Self = self;
+			ccPosMaxSizeX = world.Map.MapSize.X;
 			ccPosMinSizeX = 0;
-			ccPosMaxSizeY = thisWorld.Map.MapSize.Y;
+			ccPosMaxSizeY = world.Map.MapSize.Y;
 			ccPosMinSizeY = 0;
-			cPosMaxSizeX = thisWorld.Map.MapSize.X - 1;
+			cPosMaxSizeX = world.Map.MapSize.X - 1;
 			cPosMinSizeX = 0;
-			cPosMaxSizeY = thisWorld.Map.MapSize.Y - 1;
+			cPosMaxSizeY = world.Map.MapSize.Y - 1;
 			cPosMinSizeY = 0;
 
 			ResetLists();
