@@ -9,14 +9,15 @@
 		{
 			"label": "build",
 			"command": "make",
+            "type": "process",
 			"args": [
 				"all",
-				"CONFIGURATION=DebugWithOverlay"
+				"CONFIGURATION=Debug"
 			],
 			"windows": {
 				"command": "make.cmd"
 			},
-			"problemMatcher": [],
+            "problemMatcher": "$msCompile",
 			"group": {
 				"kind": "build",
 				"isDefault": true

@@ -181,12 +181,12 @@ public class PathNode : IComparable<PathNode>
 }
 
 // Main navigation mesh class
-public class NavMesh
+public class NavMeshRaw
 {
     private readonly Dictionary<int, NavTriangle> triangles;
     private readonly Dictionary<FixedVector2, int> spatialHash;
 
-    public NavMesh()
+    public NavMeshRaw()
     {
         triangles = new Dictionary<int, NavTriangle>();
         spatialHash = new Dictionary<FixedVector2, int>();
@@ -319,9 +319,9 @@ public class NavMesh
     }
 
     // Helper method to create a simple test nav mesh
-    public static NavMesh CreateTestMesh()
+    public static NavMeshRaw CreateTestMesh()
     {
-        var navMesh = new NavMesh();
+        var navMesh = new NavMeshRaw();
 
         // Create a simple diamond-shaped nav mesh
         var tri1 = new NavTriangle(1, new FixedVector2(0, 0), new FixedVector2(5, 5), new FixedVector2(0, 10));
@@ -349,7 +349,7 @@ public class NavMeshExample
 {
     public static void Main()
     {
-        var navMesh = NavMesh.CreateTestMesh();
+        var navMesh = NavMeshRaw.CreateTestMesh();
 
         var start = new FixedVector2(1, 1);
         var end = new FixedVector2(9, 1);

@@ -10,9 +10,12 @@
 		DefeatMusic: map
 	TerrainGeometryOverlay:
 	CollisionDebugOverlay:
-	ClearThetaStarPathfinderOverlay:
+	ClearPathfinderOverlays:
+	NavMeshPathfinderOverlay:
 	ThetaStarPathfinderOverlay:
 	PathfinderExecutionManager:
+    NavMesh:
+        SpatialHashGridSize: 1024
 	CPosCoordsDebugOverlay:
 	DebugVisualizations:
 	ThetaStarCache:

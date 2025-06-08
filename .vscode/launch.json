@@ -44,6 +44,14 @@
 			},
 			"args": ["Game.Mod=ra", "Engine.EngineDir=.."],
 			"preLaunchTask": "build",
+			"symbolOptions": {
+                "searchPaths": [
+                    "${workspaceFolder}/bin",
+                    "${workspaceFolder}/bin/"
+                ],
+				"searchMicrosoftSymbolServer": false,
+				"searchNuGetOrgSymbolServer": false
+			}
 		},
 		{
 			"name": "Launch (D2k)",

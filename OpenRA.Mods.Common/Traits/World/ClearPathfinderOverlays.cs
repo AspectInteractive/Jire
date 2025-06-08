@@ -13,7 +13,6 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using OpenRA.Graphics;
-using OpenRA.Mods.Common.Activities;
 using OpenRA.Mods.Common.Commands;
 using OpenRA.Traits;
 
@@ -21,15 +20,15 @@ namespace OpenRA.Mods.Common.Traits
 {
 	[TraitLocation(SystemActors.World | SystemActors.EditorWorld)]
 	[Desc("Renders a debug overlay of the Anya Pathfinder intervals and paths. Attach this to the world actor.")]
-	public class ClearThetaStarPathfinderOverlayInfo : TraitInfo<ClearThetaStarPathfinderOverlay> { }
+	public class ClearPathfinderOverlaysInfo : TraitInfo<ClearPathfinderOverlays> { }
 
-	public class ClearThetaStarPathfinderOverlay : IWorldLoaded, IChatCommand
+	public class ClearPathfinderOverlays : IWorldLoaded, IChatCommand
 	{
 		public readonly List<Command> Comms;
 		public Action ClearFunc;
 		public bool Enabled;
 
-		public ClearThetaStarPathfinderOverlay()
+		public ClearPathfinderOverlays()
 		{
 			Comms = new List<Command>()
 			{
@@ -63,6 +62,15 @@ namespace OpenRA.Mods.Common.Traits
 				thetaStarPathFinderTrait.ClearPoints();
 				thetaStarPathFinderTrait.ClearCircles();
 				thetaStarPathFinderTrait.ClearRadiuses();
+
+				var navMeshPathFinderTrait = w.WorldActor.TraitsImplementing<NavMeshPathfinderOverlay>().FirstEnabledTraitOrDefault();
+				navMeshPathFinderTrait.ClearPaths();
+				navMeshPathFinderTrait.ClearTriangles();
+				navMeshPathFinderTrait.ClearLines();
+				navMeshPathFinderTrait.ClearLinesWithColors();
+				navMeshPathFinderTrait.ClearPoints();
+				navMeshPathFinderTrait.ClearCircles();
+				navMeshPathFinderTrait.ClearRadiuses();
 
 				var collDebugOverlayTrait = w.WorldActor.TraitsImplementing<CollisionDebugOverlay>().FirstEnabledTraitOrDefault();
 				collDebugOverlayTrait.ClearIntervals();
