@@ -37,6 +37,8 @@ namespace OpenRA
 		public static bool operator ==(in WPos me, in WPos other) { return me.X == other.X && me.Y == other.Y && me.Z == other.Z; }
 		public static bool operator !=(in WPos me, in WPos other) { return !(me == other); }
 
+		public WPos XZ() => new(X, Z, 0);
+
 		/// <summary>
 		/// Returns the linear interpolation between points 'a' and 'b'.
 		/// </summary>

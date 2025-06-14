@@ -12,10 +12,9 @@
 	CollisionDebugOverlay:
 	ClearPathfinderOverlays:
 	NavMeshPathfinderOverlay:
+    NavMesh:
 	ThetaStarPathfinderOverlay:
 	PathfinderExecutionManager:
-    NavMesh:
-        SpatialHashGridSize: 1024
 	CPosCoordsDebugOverlay:
 	DebugVisualizations:
 	ThetaStarCache:

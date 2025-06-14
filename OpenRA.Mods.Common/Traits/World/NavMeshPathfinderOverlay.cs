@@ -226,6 +226,8 @@ namespace OpenRA.Mods.Common.Traits
 			if (triangle.Count < 3)
 				throw new ArgumentException("Triangle must have at least 3 points.");
 
+			triangle.Add(triangle[0]); // Add the first point to the end so that the triangle loops around.
+
 			triangles.Add((triangle, color));
 		}
 

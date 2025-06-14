@@ -18,10 +18,13 @@ namespace OpenRA.Mods.Common.Pathfinder
             navMesh = self.World.WorldActor.Trait<NavMesh>();
         }
 
-        public override List<WPos> FindPath(WPos start, WPos goal)
+		// TO BE IMPLEMENTED
+		public override List<WPos> FindPath(WPos start, WPos goal)
         {
-            // Use the nav mesh for pathfinding
-            return navMesh.FindPath(start, goal);
+			// Use the nav mesh for pathfinding
+			//return navMesh.FindPath(start, goal);
+
+			return new();
         }
 
         public override void Expand(int maxExpansions)
@@ -30,12 +33,15 @@ namespace OpenRA.Mods.Common.Pathfinder
             Running = false;
         }
 
+		// TO BE IMPLEMENTED
         public bool IsPathObservable(WPos sourcePos, WPos destPos, IHitShape unitHitShape, bool useUnitRadius, int neighbours)
         {
-            var startTriangle = navMesh.FindTriangleContaining(sourcePos);
-            var endTriangle = navMesh.FindTriangleContaining(destPos);
+			//var startTriangle = navMesh.FindTriangleContaining(sourcePos);
+			//var endTriangle = navMesh.FindTriangleContaining(destPos);
 
-            return startTriangle != -1 && startTriangle == endTriangle;
+			//return startTriangle != -1 && startTriangle == endTriangle;
+
+			return false;
         }
 
         public void Dispose()
